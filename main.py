@@ -1,6 +1,7 @@
 import machine
 from time import sleep
 import gc
+import json
 
 import config_lora
 from machine import Pin, SPI
@@ -27,7 +28,7 @@ try:
     lora = SX127x(device_spi, pins=device_pins)
 except:
     machine.reset()
-gc.collect()
+# gc.collect()
 
 # WIFI Stuff
 import network
@@ -40,7 +41,8 @@ while wlan.isconnected() == False:
 
 print('Connection successful')
 print(wlan.ifconfig())
-gc.collect()
+# gc.collect()
+
 
 #  Helper to find message index
 def find(lst, key, value):
@@ -49,8 +51,10 @@ def find(lst, key, value):
             return i
     return -1
 
+
 # WEB SERVER stuff
 from MicroWebSrv2 import *
+
 
 # Return Lora messages from an index
 @WebRoute(GET, '/messages')
@@ -68,10 +72,25 @@ def RequestHandler(microWebSrv2, request):
     else:
         request.Response.ReturnJSON(200, messages)
 
+# Send receive message over HTTP and sned out over Lora
+@WebRoute(POST, '/message')
+def RequestHandler(microWebSrv2, request):
+    # body = request.GetPostedJSONObject()
+
+    # print('body: ', body)
+    # bodyStr = json.dumps(body)
+    # print(bodyStr)
+    lora.
+    lora.println('1234567890abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklmnopqrstuvwxyz')
+    sleep(2)
+    request.Response.ReturnOk()
+
+
 
 count = 0
 MAX_MESSAGES_LENGTH = 30
 messages = []
+sendMessage = ''
 
 if __name__ == '__main__':
     # Instanciates the MicroWebSrv2 class, 
@@ -88,17 +107,22 @@ if __name__ == '__main__':
 
     # Starts the server as easily as possible in managed mode,
     mws2.StartManaged()
-    print(gc.mem_free())
-    gc.collect()
-    print(gc.mem_free())
+    # print(gc.mem_free())
+    # gc.collect()
+    # print(gc.mem_free())
     # Main program loop until keyboard interrupt,
     try:
         while mws2.IsRunning:
+            sleep(1)
+            lora.on_receive()
             if lora.received_packet():
                 lora.blink_led()
                 count += 1
                 payload = lora.read_payload()
                 print('lora recieved[', count, ']: ', payload)
+                # payload = payload.decode("utf-8")
+                # print('decoded payload [', count, ']: ', payload)
+                # payload = json.loads(payload)
                 if len(messages) >= MAX_MESSAGES_LENGTH: messages.pop(0)
                 messages.append(
                     {
