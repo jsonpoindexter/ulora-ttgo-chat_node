@@ -421,7 +421,6 @@ class SX127x:
     def received_packet(self, size = 0):
         # Don't check Rx until Tx is done
         if self._lock:
-            print(self._lock)
             return not self._lock
 
         irq_flags = self.get_irq_flags()
@@ -449,7 +448,6 @@ class SX127x:
             )
 
     def read_payload(self):
-        print('READ PAYLOAD')
         # set FIFO address to current RX address
         # fifo_rx_current_addr = self.read_register(REG_FIFO_RX_CURRENT_ADDR)
         self.write_register(
@@ -457,19 +455,15 @@ class SX127x:
             self.read_register(REG_FIFO_RX_CURRENT_ADDR)
         )
 
-        print("self._implicit_header_mode: ", self._implicit_header_mode)
         # read packet length
         if self._implicit_header_mode:
             packet_length = self.read_register(REG_PAYLOAD_LENGTH)  
         else:
             packet_length = self.read_register(REG_RX_NB_BYTES)
-        print("packet_length: ", packet_length)
 
         payload = bytearray()
         for i in range(packet_length):
-            temp = self.read_register(REG_FIFO)
-            print(i, ' - ', temp)
-            payload.append(temp)
+            payload.append(self.read_register(REG_FIFO))
 
         self.collect_garbage()
         return bytes(payload)
