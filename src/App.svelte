@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	const date = new Date();
 	let message = "" // Outgoing message
+	let name = ""
 	let messageObjs = [
 		// TODO: move this over to a testmessage.json or something...
 		// {
@@ -41,9 +42,9 @@
 		const body  = JSON.stringify({
 			message,
 			timestamp: new Date().getTime(),
-			sender: 'dino' // TODO: create input to set sender
+			sender: name
 		})
-		await fetch('http://192.168.1.78/message', {
+		await fetch('/message', {
 			method: "POST",
 			body,
 			headers: {
@@ -53,7 +54,7 @@
 	}
 
 	const formatTime = (timeStr) => {
-		const date = new Date(parseInt(timeStr))
+		const date = new Date(timeStr)
 		return `${date.getHours()}:${date.getMinutes()}:${date.getSeconds()}`
 	}
 
@@ -71,21 +72,33 @@
 		{#each messageObjs as messageObj}
 			<div class="chat-message-container">[{formatTime(messageObj.timestamp)}] &lt;{messageObj.sender}&gt; {messageObj.message}</div>
 		{:else}
-		<!-- this block renders when messages.length === 0 -->
+			<!-- this block renders when messages.length === 0 -->
 			<p>loading...</p>
 		{/each}
 	</div>
 	<div class="chat-send-container">
-		<label><input type="text" placeholder="Send a message" bind:value={message} /></label>
-		<label><input type="submit" value="Send" on:click={sendMessage}></label>
+		<label><input type="text" placeholder="Name" bind:value={name}/></label>
+		<label><input type="text" placeholder="Send a message" bind:value={message}/></label>
+		<label><input type="submit" value="Send" on:click={sendMessage}/></label>
 	</div>
 </main>
 
 <style>
+	:global(body) {
+		overflow: hidden;
+		margin: 0;
+		width: 100%;
+		padding: 0;
+	}
+
 	main {
 		text-align: center;
-		padding: 1em;
-		margin: 0 auto;
+		width: 100%;
+		height: 100%;
+		display: flex;
+		flex-direction: column;
+		/*padding: 1em;*/
+		/*margin: 0 auto;*/
 	}
 
 	h1 {
@@ -101,15 +114,17 @@
 		}
 	}
 	.chat-container {
-		margin: 10px;
 		border: 1px solid lightblue;
 		padding: 10px;
+		flex-grow: 1;
 	}
 	.chat-message-container {
 		display: flex;
 		flex-direction: row;
+
 	}
 	.chat-send-container {
+		margin: 10px 0;
 		display: flex;
 		justify-content: center;
 	}
