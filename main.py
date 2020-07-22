@@ -29,7 +29,6 @@ try:
 except:
     machine.reset()
 
-
 # WIFI Stuff
 import network
 
@@ -75,11 +74,9 @@ def RequestHandler(microWebSrv2, request):
 # Send receive message over HTTP and sned out over Lora
 @WebRoute(POST, '/message')
 def RequestHandler(microWebSrv2, request):
-    # body = request.GetPostedJSONObject()
-    # print('body: ', body)
-    # bodyStr = json.dumps(body)
-    # print(bodyStr)
-    lora.println('1234567890abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklmnopqrstuvwxyz')
+    body = request.GetPostedJSONObject()
+    print('body: ', body)
+    lora.println(json.dumps(body))
     request.Response.ReturnOk()
 
 
@@ -110,15 +107,15 @@ if __name__ == '__main__':
                 print('lora.received_packet()')
                 lora.blink_led()
                 count += 1
-                payload = lora.read_payload()
+                payload = json.loads(lora.read_payload())
                 print('lora recieved[', count, ']: ', payload)
                 if len(messages) >= MAX_MESSAGES_LENGTH: messages.pop(0)
                 messages.append(
                     {
                         'index': count,
-                        'time': '010101-202020',
-                        'message': payload,
-                        'sender': 'other'
+                        'timestamp': payload['timestamp'],
+                        'message': payload['message'],
+                        'sender': payload['sender']
                     }
                 )
 
