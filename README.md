@@ -91,3 +91,9 @@ Then, from within your project folder:
 npm run build
 surge public my-project.surge.sh
 ```
+
+
+## MicroPython
+
+# Build with extra libs
+* Use https://github.com/jsonpoindexter/micropython and follow steps for compiling MicroPython for the ESP32
