@@ -1,7 +1,9 @@
 <script>
 	import { onMount } from 'svelte';
 	const date = new Date();
+	let message = "" // Outgoing message
 	let messageObjs = [
+		// TODO: move this over to a testmessage.json or something...
 		// {
 		// 	index: 0,
 		// 	time: `${date.getMonth() + 1}-${date.getDate()}-${date.getFullYear().toString().substr(-2)} ${date.getHours()}:${date.getMinutes()}:${date.getSeconds()}`,
@@ -30,10 +32,30 @@
 	const fetchMessages = async () => {
 		console.log(messageObjs);
 		const query = messageObjs.length ? `?start_index=${messageObjs[0].index}` : '';
-		const res = await fetch('http://192.168.1.78/messages' +  query);
+		const res = await fetch('http://192.168.1.52/messages' +  query);
 		const fetchedMessageObjs = await res.json();
 		messageObjs = [...fetchedMessageObjs.reverse(), ...messageObjs]
 	};
+
+	const sendMessage = async () => {
+		const body  = JSON.stringify({
+			message,
+			timestamp: new Date().getTime(),
+			sender: 'dino' // TODO: create input to set sender
+		})
+		await fetch('http://192.168.1.78/message', {
+			method: "POST",
+			body,
+			headers: {
+				'Content-Type': 'application/json'
+			}
+		})
+	}
+
+	const formatTime = (timeStr) => {
+		const date = new Date(parseInt(timeStr))
+		return `${date.getHours()}:${date.getMinutes()}:${date.getSeconds()}`
+	}
 
 	const messagesTimeout = () => {
 		setTimeout(async ()=>{
@@ -47,11 +69,15 @@
 	<h1>Lora Chat</h1>
 	<div class="chat-container">
 		{#each messageObjs as messageObj}
-			<div class="chat-message-container">[{messageObj.index}] &lt;{messageObj.sender}&gt; {messageObj.message}</div>
+			<div class="chat-message-container">[{formatTime(messageObj.timestamp)}] &lt;{messageObj.sender}&gt; {messageObj.message}</div>
 		{:else}
 		<!-- this block renders when messages.length === 0 -->
 			<p>loading...</p>
 		{/each}
+	</div>
+	<div class="chat-send-container">
+		<label><input type="text" placeholder="Send a message" bind:value={message} /></label>
+		<label><input type="submit" value="Send" on:click={sendMessage}></label>
 	</div>
 </main>
 
@@ -82,5 +108,9 @@
 	.chat-message-container {
 		display: flex;
 		flex-direction: row;
+	}
+	.chat-send-container {
+		display: flex;
+		justify-content: center;
 	}
 </style>
