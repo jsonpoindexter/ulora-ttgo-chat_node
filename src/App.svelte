@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	const date = new Date();
 	let message = "" // Outgoing message
-	let name = ""
+	let name = "" // Name of sender
 	let messageObjs = [
 		// TODO: move this over to a testmessage.json or something...
 		// {
@@ -24,6 +24,7 @@
 		// 	message: "Something is here"
 		// }
 	];
+	const dateTimeFormat = new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit', second: '2-digit',  hour12: false,})
 
 	onMount(async() => {
 		await fetchMessages();
@@ -31,9 +32,8 @@
 	});
 
 	const fetchMessages = async () => {
-		console.log(messageObjs);
-		const query = messageObjs.length ? `?start_index=${messageObjs[0].index}` : '';
-		const res = await fetch('http://192.168.1.52/messages' +  query);
+		const query = messageObjs.length ? `?timestamp=${messageObjs[0].timestamp}` : '';
+		const res = await fetch('/messages' +  query);
 		const fetchedMessageObjs = await res.json();
 		messageObjs = [...fetchedMessageObjs.reverse(), ...messageObjs]
 	};
@@ -55,7 +55,8 @@
 
 	const formatTime = (timeStr) => {
 		const date = new Date(timeStr)
-		return `${date.getHours()}:${date.getMinutes()}:${date.getSeconds()}`
+		const [{ value: hour },,{ value: minute },,{ value: second }] = dateTimeFormat.formatToParts(date)
+		return `${hour}:${minute}:${second}`
 	}
 
 	const messagesTimeout = () => {
@@ -91,6 +92,12 @@
 		padding: 0;
 	}
 
+	/*@media (min-width: 640px) {*/
+	/*	main {*/
+	/*		max-width: none;*/
+	/*	}*/
+	/*}*/
+
 	main {
 		text-align: center;
 		width: 100%;
@@ -108,11 +115,6 @@
 		font-weight: 100;
 	}
 
-	@media (min-width: 640px) {
-		main {
-			max-width: none;
-		}
-	}
 	.chat-container {
 		border: 1px solid lightblue;
 		padding: 10px;
