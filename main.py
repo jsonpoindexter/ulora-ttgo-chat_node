@@ -1,11 +1,11 @@
-import machine
+import machine, json, gc
 from time import sleep
-import gc
-import json
-
 import config_lora
 from machine import Pin, SPI
 from sx127x import SX127x
+
+MAX_MESSAGES_LENGTH = 30
+messages = []
 
 device_pins = {
     'miso': 19,
@@ -77,13 +77,18 @@ def RequestHandler(microWebSrv2, request):
     body = request.GetPostedJSONObject()
     print('body: ', body)
     lora.println(json.dumps(body))
+    addMessage(body)
     request.Response.ReturnOk()
 
 
-count = 0
-MAX_MESSAGES_LENGTH = 30
-messages = []
-sendMessage = ''
+def addMessage(payload):
+    if len(messages) >= MAX_MESSAGES_LENGTH: messages.pop(0)
+    messages.append({
+        'timestamp': payload['timestamp'],
+        'message': payload['message'],
+        'sender': payload['sender']
+    })
+
 
 if __name__ == '__main__':
     # Instanciates the MicroWebSrv2 class, 
@@ -104,20 +109,15 @@ if __name__ == '__main__':
     try:
         while mws2.IsRunning:
             if lora.received_packet():
-                print('lora.received_packet()')
                 lora.blink_led()
-                count += 1
-                payload = json.loads(lora.read_payload())
-                print('lora recieved[', count, ']: ', payload)
-                if len(messages) >= MAX_MESSAGES_LENGTH: messages.pop(0)
-                messages.append(
-                    {
-                        'index': count,
-                        'timestamp': payload['timestamp'],
-                        'message': payload['message'],
-                        'sender': payload['sender']
-                    }
-                )
+                payload = lora.read_payload()
+                print('[LORA] received payload: ', payload)
+                try:
+                    payload = json.loads(payload)
+                    addMessage(payload)
+                except (Exception, TypeError) as error:
+                    print("[LORA] Error parsing JSON payload: ", error)
+
 
     except KeyboardInterrupt:
         pass
