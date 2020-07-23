@@ -57,16 +57,21 @@ from MicroWebSrv2 import *
 # Return Lora messages from an index
 @WebRoute(GET, '/messages')
 def RequestHandler(microWebSrv2, request):
-    start_index = request.QueryParams.get('start_index')
-    if start_index is not None:
-        start_index = int(start_index)
-        print('start_index: ', start_index)
+    timestamp = request.QueryParams.get('timestamp')
+    if timestamp is not None:
+        timestamp = int(timestamp)
         # Find the index of the message where the message's { index: number } == start_index
         # https://stackoverflow.com/questions/4391697/find-the-index-of-a-dict-within-a-list-by-matching-the-dicts-value
         # message_index = next((index for (index, d) in enumerate(messages) if d["index"] == start_index), None)
-        message_index = find(messages, "index", start_index)
+        message_index = find(messages, "timestamp", timestamp)
+        print(timestamp)
+        print(messages)
         print('message_index: ', message_index)
-        request.Response.ReturnJSON(200, messages[(message_index + 1):])
+        if message_index == -1:
+            request.Response.ReturnJSON(200, [])
+        else:
+            request.Response.ReturnJSON(200, messages[(message_index + 1):])
+
     else:
         request.Response.ReturnJSON(200, messages)
 
@@ -82,7 +87,8 @@ def RequestHandler(microWebSrv2, request):
 
 
 def addMessage(payload):
-    if len(messages) >= MAX_MESSAGES_LENGTH: messages.pop(0)
+    if len(messages) >= MAX_MESSAGES_LENGTH:
+        messages.pop(0)
     messages.append({
         'timestamp': payload['timestamp'],
         'message': payload['message'],
@@ -91,7 +97,7 @@ def addMessage(payload):
 
 
 if __name__ == '__main__':
-    # Instanciates the MicroWebSrv2 class, 
+    # Instanciates the MicroWebSrv2 class,
     mws2 = MicroWebSrv2()
     mws2.AllowAllOrigins = True  # TODO: remove after testing
     mws2.CORSAllowAll = True  # TODO: remove after testing
