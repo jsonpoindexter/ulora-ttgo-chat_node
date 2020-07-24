@@ -1,14 +1,22 @@
 <script>
     import {onMount} from 'svelte'
+    // Value	State	Description
+    // 0	CONNECTING	Socket has been created. The connection is not yet open.
+    // 1	OPEN	The connection is open and ready to communicate.
+    // 2	CLOSING	The connection is in the process of closing.
+    // 3	CLOSED
+    let webSocketState = 0
     let baseUrl = '192.168.1.78' // base url used for dev
+    const webSocket = new WebSocket(`ws://${baseUrl ? baseUrl : window.location.hostname}/wschat`)
+
     let messageObjs = [] // current chat messages
-    let message = '' // current message to send
+    let message = window.localStorage.getItem('message') // current message to send
+    let messageTimeout // used to debounce name input
     let sentMessageObjStr = '' // last message that was sent. used to verify that the message send back from the server is this message
     $: isSendDisabled = sentMessageObjStr.length > 0 || webSocketState !== 1
     let name = window.localStorage.getItem('name') // sender name
     let nameTimeout // used to debounce name input
-    let webSocketState = 0
-    const webSocket = new WebSocket(`ws://${baseUrl ? baseUrl : window.location.hostname}/wschat`)
+
     const onOpen = (event)  => {
         console.log('[WS] OPENED')
     }
@@ -32,6 +40,7 @@
         if (event.data === sentMessageObjStr) {
             sentMessageObjStr = ''
             message = ''
+            window.localStorage.setItem('message', '')
         }
         try {
             const data =  JSON.parse(event.data)
@@ -86,6 +95,12 @@
             window.localStorage.setItem('name', name)
         }, 500)
     }
+    const saveMessage= (message) => {
+        clearTimeout(messageTimeout)
+        nameTimeout = setTimeout(() => {
+            window.localStorage.setItem('message', message)
+        }, 500)
+    }
 
 
 </script>
@@ -109,7 +124,7 @@
     </div>
     <div class="chat-send-container">
         <label><input type="text" placeholder="Name" bind:value={name} on:input={saveName(name)} /></label>
-        <label><input type="text" placeholder="Send a message" bind:value={message}/></label>
+        <label><input type="text" placeholder="Send a message" bind:value={message} on:input={saveMessage(message)}/></label>
         <label><input type="submit" value="Send" on:click={sendMessage(message, name)} disabled="{isSendDisabled}"/></label>
     </div>
 </main>
