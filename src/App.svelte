@@ -1,15 +1,16 @@
 <script>
     import {onMount} from 'svelte'
-    let baseUrl = '192.168.1.78'
-    let messageObjs = []
-    let message = ''
-    let name = ''
+    let baseUrl = '192.168.1.78' // base url used for dev
+    let messageObjs = [] // current chat messages
+    let message = '' // current message to send
+    let sentMessageObjStr = '' // last message that was sent. used to verify that the message send back from the server is this message
+    $: isSendDisabled = sentMessageObjStr.length > 0 || webSocketState !== 1
+    let name = window.localStorage.getItem('name') // sender name
+    let nameTimeout // used to debounce name input
     let webSocketState = 0
     const webSocket = new WebSocket(`ws://${baseUrl ? baseUrl : window.location.hostname}/wschat`)
     const onOpen = (event)  => {
-        console.log(event)
-        // Get all previous chat messages, order, and concatenate them
-        // if(event.data && event.data.length) messageObjs = [...event.data.reverse(), ...messageObjs]
+        console.log('[WS] OPENED')
     }
     const onClose = (event)  => {
         console.log('[WS] CONNECTION CLOSED')
@@ -19,14 +20,19 @@
         console.log(error)
     }
     const sendMessage = (message, name) => {
-        webSocket.send(JSON.stringify({
+        sentMessageObjStr = JSON.stringify({
             message,
             timestamp: new Date().getTime(),
             sender: name
-        }))
+        })
+        webSocket.send(sentMessageObjStr)
     }
     const onMessage = (event) => {
         console.log(event)
+        if (event.data === sentMessageObjStr) {
+            sentMessageObjStr = ''
+            message = ''
+        }
         try {
             const data =  JSON.parse(event.data)
             // Handle if we are sent an array of previous message objs (on connection open)
@@ -34,7 +40,7 @@
                 messageObjs = data
             }
             else {
-                messageObjs = [data, ...messageObjs]
+                messageObjs = [...messageObjs, data]
                 console.log(messageObjs)
             }
 
@@ -74,6 +80,14 @@
         hour12: false,
     })
 
+    const saveName = (name) => {
+        clearTimeout(nameTimeout)
+        nameTimeout = setTimeout(() => {
+            window.localStorage.setItem('name', name)
+        }, 500)
+    }
+
+
 </script>
 
 <main>
@@ -83,7 +97,7 @@
             <p>Connecting...</p>
         {:else if webSocketState === 1}
             {#each messageObjs as messageObj}
-                <div class="chat-message-container">[{formatTime(messageObj.timestamp)}]&lt;{messageObj.sender}&gt;{messageObj.message}</div>
+                <div class="chat-message-container">[{formatTime(messageObj.timestamp)}] &lt;{messageObj.sender}&gt; {messageObj.message}</div>
             {:else}
                 <p>No Messages</p>
             {/each}
@@ -94,9 +108,9 @@
         {/if}
     </div>
     <div class="chat-send-container">
-        <label><input type="text" placeholder="Name" bind:value={name}/></label>
+        <label><input type="text" placeholder="Name" bind:value={name} on:input={saveName(name)} /></label>
         <label><input type="text" placeholder="Send a message" bind:value={message}/></label>
-        <label><input type="submit" value="Send" on:click={sendMessage(message, name)}/></label>
+        <label><input type="submit" value="Send" on:click={sendMessage(message, name)} disabled="{isSendDisabled}"/></label>
     </div>
 </main>
 
