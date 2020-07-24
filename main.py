@@ -61,7 +61,8 @@ def WSJoinChat(webSocket):
     with _chatLock:
         _chatWebSockets.append(webSocket)
         print('[WS] WSJoinChat %s:%s connected' % addr)
-        # webSocket.SendTextMessage(messages)
+        if messages:
+            webSocket.SendTextMessage(json.dumps(messages))
 
 def OnWebSocketTextMsg(webSocket, message) :
     print('[WS] OnWebSocketTextMsg message: %s' % message)

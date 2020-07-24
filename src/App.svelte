@@ -4,6 +4,7 @@
     let messageObjs = []
     let message = ''
     let name = ''
+    let webSocketState = 0
     const webSocket = new WebSocket(`ws://${baseUrl ? baseUrl : window.location.hostname}/wschat`)
     const onOpen = (event)  => {
         console.log(event)
@@ -27,9 +28,16 @@
     const onMessage = (event) => {
         console.log(event)
         try {
-            const messageObj = JSON.parse(event.data)
-            messageObjs = [messageObj, ...messageObjs]
-            console.log(messageObjs)
+            const data =  JSON.parse(event.data)
+            // Handle if we are sent an array of previous message objs (on connection open)
+            if (Array.isArray(data)) {
+                messageObjs = data
+            }
+            else {
+                messageObjs = [data, ...messageObjs]
+                console.log(messageObjs)
+            }
+
         } catch (err) {
             console.log(err)
         }
@@ -37,15 +45,19 @@
     }
     onMount(async () => {
         webSocket.onopen = (event) => {
+            webSocketState = webSocket.readyState
             onOpen(event)
         };
         webSocket.onclose = (event) => {
+            webSocketState = webSocket.readyState
             onClose(event)
         };
         webSocket.onmessage = (event) => {
+            webSocketState = webSocket.readyState
             onMessage(event)
         };
         webSocket.onerror = (event) => {
+            webSocketState = webSocket.readyState
             onError(event)
         }
     });
@@ -67,12 +79,19 @@
 <main>
     <h1>Lora Chat</h1>
     <div class="chat-container">
-        {#each messageObjs as messageObj}
-            <div class="chat-message-container">[{formatTime(messageObj.timestamp)}]&lt;{messageObj.sender}&gt;{messageObj.message}</div>
+        {#if webSocketState === 0 }
+            <p>Connecting...</p>
+        {:else if webSocketState === 1}
+            {#each messageObjs as messageObj}
+                <div class="chat-message-container">[{formatTime(messageObj.timestamp)}]&lt;{messageObj.sender}&gt;{messageObj.message}</div>
+            {:else}
+                <p>No Messages</p>
+            {/each}
+        {:else if webSocketState === 2}
+            <p>Closing chat...</p>
         {:else}
-        <!-- this block renders when messages.length === 0 -->
-            <p>loading...</p>
-        {/each}
+            <p>Unable to connect to chat</p>
+        {/if}
     </div>
     <div class="chat-send-container">
         <label><input type="text" placeholder="Name" bind:value={name}/></label>
