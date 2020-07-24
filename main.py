@@ -54,6 +54,63 @@ def find(lst, key, value):
 from MicroWebSrv2 import *
 
 
+def WSJoinChat(webSocket):
+    webSocket.OnTextMessage = OnWSChatTextMsg
+    webSocket.OnClosed = OnWSChatClosed
+    addr = webSocket.Request.UserAddress
+    with _chatLock:
+        _chatWebSockets.append(webSocket)
+        print('[WS] WSJoinChat %s:%s connected' % addr)
+        # webSocket.SendTextMessage(messages)
+
+def OnWebSocketTextMsg(webSocket, message) :
+    print('[WS] OnWebSocketTextMsg message: %s' % message)
+    addMessage(json.loads(message))
+    lora.println(message)
+    webSocket.SendTextMessage(message)
+
+def OnWebSocketBinaryMsg(webSocket, msg) :
+    print('WebSocket binary message: %s' % msg)
+
+
+def OnWSChatTextMsg(webSocket, message):
+    print('[WS] OnWSChatTextMsg message: %s' % message)
+    addMessage(json.loads(message))
+    lora.println(message)
+    with _chatLock:
+        for ws in _chatWebSockets:
+            ws.SendTextMessage(message)
+
+
+def OnWSChatClosed(webSocket):
+    addr = webSocket.Request.UserAddress
+    print('[WS] OnWSChatClosed message:  %s:%s' % addr)
+    with _chatLock:
+        if webSocket in _chatWebSockets:
+            _chatWebSockets.remove(webSocket)
+
+def OnWebSocketClosed(webSocket):
+    print('[WS] OnWebSocketClosed %s:%s closed' % webSocket.Request.UserAddress)
+
+def OnWebSocketAccepted(microWebSrv2, webSocket):
+    print('Example WebSocket accepted:')
+    print('   - User   : %s:%s' % webSocket.Request.UserAddress)
+    print('   - Path   : %s' % webSocket.Request.Path)
+    print('   - Origin : %s' % webSocket.Request.Origin)
+    if webSocket.Request.Path.lower() == '/wschat':
+        WSJoinChat(webSocket)
+    else:
+        webSocket.OnTextMessage = OnWebSocketTextMsg
+        webSocket.OnBinaryMessage = OnWebSocketBinaryMsg
+        webSocket.OnClosed = OnWebSocketClosed
+
+global _chatWebSockets
+_chatWebSockets = []
+
+global _chatLock
+_chatLock = allocate_lock()
+
+
 # Return Lora messages from an index
 @WebRoute(GET, '/messages')
 def RequestHandler(microWebSrv2, request):
@@ -87,6 +144,7 @@ def RequestHandler(microWebSrv2, request):
 
 
 def addMessage(payload):
+    print(messages)
     if len(messages) >= MAX_MESSAGES_LENGTH:
         messages.pop(0)
     messages.append({
@@ -97,14 +155,17 @@ def addMessage(payload):
 
 
 if __name__ == '__main__':
-    # Instanciates the MicroWebSrv2 class,
+    # Loads the WebSockets module globally and configure it,
+    wsMod = MicroWebSrv2.LoadModule('WebSockets')
+    wsMod.OnWebSocketAccepted = OnWebSocketAccepted
+
+    # Instantiates the MicroWebSrv2 class,
     mws2 = MicroWebSrv2()
     mws2.AllowAllOrigins = True  # TODO: remove after testing
     mws2.CORSAllowAll = True  # TODO: remove after testing
 
     # For embedded MicroPython, use a very light configuration,
     mws2.SetEmbeddedConfig()
-    print(mws2.BufferSlotsCount)
 
     # All pages not found will be redirected to the home '/',
     # mws2.NotFoundURL = '/'
