@@ -1,8 +1,11 @@
-import machine, json, gc
-from time import sleep
+import machine, json
 import LoRa
+import WiFi
 
+# Init LoRa first because it might require a restart
 lora = LoRa.init()
+WiFi.init()
+
 
 MAX_MESSAGES_LENGTH = 30
 messages = []
@@ -15,19 +18,6 @@ try:
     print("messages: ", messages)
 except Exception as error:
     print(error)
-
-# WIFI Stuff
-import network
-
-wlan = network.WLAN(network.STA_IF)
-wlan.active(True)
-wlan.connect('***REMOVED***', '***REMOVED***')
-while wlan.isconnected() == False:
-    pass
-
-print('Connection successful')
-print(wlan.ifconfig())
-
 
 #  Helper to find message index
 def find(lst, key, value):
