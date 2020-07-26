@@ -8,7 +8,7 @@
     let webSocketState
     let baseUrl = '192.168.1.78' // base url used for dev
     let webSocket
-    let messageObjs = [] // current chat messages
+    let messageObjs// current chat messages
     let message = window.localStorage.getItem('message') // current message to send
     let messageTimeout // used to debounce name input
     let sentMessageObjStr = '' // last message that was sent. used to verify that the message send back from the server is this message
@@ -20,6 +20,7 @@
         webSocket = new WebSocket(`ws://${baseUrl ? baseUrl : window.location.hostname}/wschat`)
         webSocketState = webSocket.readyState
         webSocket.onopen = (event) => {
+            messageObjs = []
             webSocketState = webSocket.readyState
             onOpen(event)
         };
@@ -70,6 +71,7 @@
             }
             else {
                 messageObjs = [...messageObjs, data]
+                // TODO: sort messages by timestamp, messageObjs are not ensured to be in order
                 console.log(messageObjs)
             }
 

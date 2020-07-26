@@ -1,4 +1,4 @@
-import machine, json
+import machine, json, btree
 import LoRa
 import WiFi
 
@@ -11,13 +11,15 @@ MAX_MESSAGES_LENGTH = 30
 messages = []
 # Load store message objs from file in array
 try:
-    messagesFile = open('messages.json', 'r')
-    for line in messagesFile:
-        messages.append(json.loads(line))
-    messagesFile.close()
-    print("messages: ", messages)
-except Exception as error:
-    print(error)
+    dbFile = open('db.btree', 'r+b')
+except OSError:
+    dbFile = open('db.tree', 'w+b')
+db = btree.open(dbFile)
+for value in db.values():
+    print("value: ", value)
+    messages.append(json.loads(value))
+db.close()
+print("messages: ", messages)
 
 #  Helper to find message index
 def find(lst, key, value):
@@ -90,7 +92,6 @@ _chatLock = allocate_lock()
 
 
 def addMessage(payload):
-    print(messages)
     if len(messages) >= MAX_MESSAGES_LENGTH:
         messages.pop(0)
     message = {
@@ -99,9 +100,15 @@ def addMessage(payload):
         'sender': payload['sender']
     }
     messages.append(message)
-    messagesFile = open('messages.json', 'a')
-    messagesFile.write(json.dumps(message) + '\n')
-    messagesFile.close()
+    # Write messages array to DB
+    # TODO: maybe there is a less intense way to implement this
+    db = btree.open(dbFile)
+    for index in range(len(messages)):
+        messages[index] = message
+        db[bytes(index)] = json.dumps(message)
+    db.flush()
+    db.close()
+    print("messages: ", messages)
 
 
 if __name__ == '__main__':
@@ -141,4 +148,4 @@ if __name__ == '__main__':
 
     # End,
     mws2.Stop()
-    messagesFile.close()
+    dbFile.close()
