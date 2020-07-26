@@ -5,10 +5,9 @@
     // 1	OPEN	The connection is open and ready to communicate.
     // 2	CLOSING	The connection is in the process of closing.
     // 3	CLOSED
-    let webSocketState = 0
+    let webSocketState
     let baseUrl = '192.168.1.78' // base url used for dev
-    const webSocket = new WebSocket(`ws://${baseUrl ? baseUrl : window.location.hostname}/wschat`)
-
+    let webSocket
     let messageObjs = [] // current chat messages
     let message = window.localStorage.getItem('message') // current message to send
     let messageTimeout // used to debounce name input
@@ -17,6 +16,28 @@
     let name = window.localStorage.getItem('name') // sender name
     let nameTimeout // used to debounce name input
 
+    const openWebSocket = () => {
+        webSocket = new WebSocket(`ws://${baseUrl ? baseUrl : window.location.hostname}/wschat`)
+        webSocketState = webSocket.readyState
+        webSocket.onopen = (event) => {
+            webSocketState = webSocket.readyState
+            onOpen(event)
+        };
+        webSocket.onclose = (event) => {
+            webSocketState = webSocket.readyState
+            onClose(event)
+        };
+        webSocket.onmessage = (event) => {
+            webSocketState = webSocket.readyState
+            onMessage(event)
+        };
+        webSocket.onerror = (event) => {
+            webSocketState = webSocket.readyState
+            onError(event)
+        }
+        webSocket = webSocket
+    }
+    openWebSocket()
     const onOpen = (event)  => {
         console.log('[WS] OPENED')
     }
@@ -36,7 +57,6 @@
         webSocket.send(sentMessageObjStr)
     }
     const onMessage = (event) => {
-        console.log(event)
         if (event.data === sentMessageObjStr) {
             sentMessageObjStr = ''
             message = ''
@@ -58,25 +78,6 @@
         }
 
     }
-    onMount(async () => {
-        webSocket.onopen = (event) => {
-            webSocketState = webSocket.readyState
-            onOpen(event)
-        };
-        webSocket.onclose = (event) => {
-            webSocketState = webSocket.readyState
-            onClose(event)
-        };
-        webSocket.onmessage = (event) => {
-            webSocketState = webSocket.readyState
-            onMessage(event)
-        };
-        webSocket.onerror = (event) => {
-            webSocketState = webSocket.readyState
-            onError(event)
-        }
-    });
-
     const formatTime = (timeStr) => {
         const date = new Date(timeStr)
         const [{value: hour}, , {value: minute}, , {value: second}] = dateTimeFormat.formatToParts(date)
@@ -119,7 +120,8 @@
         {:else if webSocketState === 2}
             <p>Closing chat...</p>
         {:else}
-            <p>Unable to connect to chat</p>
+            <p>Disconnected form chat server</p>
+            <label><input type="button" value="Reconnect" on:click={openWebSocket()} /></label>
         {/if}
     </div>
     <div class="chat-send-container">
@@ -161,6 +163,7 @@
     }
 
     .chat-container {
+        font-family: Menlo, Consolas, serif;
         border: 1px solid lightblue;
         padding: 10px;
         flex-grow: 1;
