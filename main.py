@@ -3,10 +3,6 @@ from time import sleep
 import config_lora
 from machine import Pin, SPI
 from sx127x import SX127x
-
-MAX_MESSAGES_LENGTH = 30
-messages = []
-
 device_pins = {
     'miso': 19,
     'mosi': 27,
@@ -28,6 +24,19 @@ try:
     lora = SX127x(device_spi, pins=device_pins)
 except:
     machine.reset()
+
+MAX_MESSAGES_LENGTH = 30
+
+messages = []
+# Load store message objs from file in array
+try:
+    messagesFile = open('messages.json', 'r')
+    for line in messagesFile:
+        messages.append(json.loads(line))
+    messagesFile.close()
+    print("messages: ", messages)
+except Exception as error:
+    print(error)
 
 # WIFI Stuff
 import network
@@ -112,47 +121,19 @@ global _chatLock
 _chatLock = allocate_lock()
 
 
-# Return Lora messages from an index
-@WebRoute(GET, '/messages')
-def RequestHandler(microWebSrv2, request):
-    timestamp = request.QueryParams.get('timestamp')
-    if timestamp is not None:
-        timestamp = int(timestamp)
-        # Find the index of the message where the message's { index: number } == start_index
-        # https://stackoverflow.com/questions/4391697/find-the-index-of-a-dict-within-a-list-by-matching-the-dicts-value
-        # message_index = next((index for (index, d) in enumerate(messages) if d["index"] == start_index), None)
-        message_index = find(messages, "timestamp", timestamp)
-        print(timestamp)
-        print(messages)
-        print('message_index: ', message_index)
-        if message_index == -1:
-            request.Response.ReturnJSON(200, [])
-        else:
-            request.Response.ReturnJSON(200, messages[(message_index + 1):])
-
-    else:
-        request.Response.ReturnJSON(200, messages)
-
-
-# Send receive message over HTTP and sned out over Lora
-@WebRoute(POST, '/message')
-def RequestHandler(microWebSrv2, request):
-    body = request.GetPostedJSONObject()
-    print('body: ', body)
-    lora.println(json.dumps(body))
-    addMessage(body)
-    request.Response.ReturnOk()
-
-
 def addMessage(payload):
     print(messages)
     if len(messages) >= MAX_MESSAGES_LENGTH:
         messages.pop(0)
-    messages.append({
+    message = {
         'timestamp': payload['timestamp'],
         'message': payload['message'],
         'sender': payload['sender']
-    })
+    }
+    messages.append(message)
+    messagesFile = open('messages.json', 'a')
+    messagesFile.write(json.dumps(message) + '\n')
+    messagesFile.close()
 
 
 if __name__ == '__main__':
@@ -192,3 +173,4 @@ if __name__ == '__main__':
 
     # End,
     mws2.Stop()
+    messagesFile.close()
