@@ -1,4 +1,5 @@
 import machine, json, gc
+import credentials
 
 ########## LORA ##########
 from time import sleep
@@ -116,7 +117,7 @@ import network
 
 wlan = network.WLAN(network.STA_IF)
 wlan.active(True)
-wlan.connect('SSID', 'PASSWORD')
+wlan.connect(credentials.WIFI['SSID'], credentials.WIFI['PASSWORD'])
 while wlan.isconnected() == False:
     pass
 
