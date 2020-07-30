@@ -43,9 +43,8 @@ def onLoraRX():
         # Send messageObj over BLE
         if ble_peripheral.is_connected():
             ble_peripheral.send(payload)
-        with _chatLock:  # Send message to all other web sockets NOTE: repeated code
-            for ws in _chatWebSockets:
-                ws.SendTextMessage(payload.decode("utf-8"))
+        # Send message to all web sockets
+        SendAllWSChatMsg(payload.decode("utf-8"))
 
 
 ########## MESSAGES ##########
@@ -103,113 +102,119 @@ def on_ble_rx(value):
     else:  # Received a normal message
         lora.println(payload)  # Send message over Lora
         addMessage(json.loads(payload))  # Add message to local array and storage
-        with _chatLock:  # Send message to all other web sockets NOTE: repeated code
-            for ws in _chatWebSockets:
-                ws.SendTextMessage(payload)
+        # Send message to all web sockets
+        SendAllWSChatMsg(payload)
 
 
 ble_peripheral.on_write(on_ble_rx)
 
 ########## WEB SERVER ##########
 WEBSERVER_ENABLED = False  # Used to enable/disable web server
-# WIFI Setup
-import network
 
-wlan = network.WLAN(network.STA_IF)
-wlan.active(True)
-wlan.connect(credentials.WIFI['SSID'], credentials.WIFI['PASSWORD'])
-while wlan.isconnected() == False:
-    pass
+if WEBSERVER_ENABLED:
+    # WIFI Setup
+    import network
 
-print('[WLAN] Connection successful')
-print(wlan.ifconfig())
+    wlan = network.WLAN(network.STA_IF)
+    wlan.active(True)
+    wlan.connect(credentials.WIFI['SSID'], credentials.WIFI['PASSWORD'])
+    while wlan.isconnected() == False:
+        pass
 
-from MicroWebSrv2 import *
+    print('[WLAN] Connection successful')
+    print(wlan.ifconfig())
 
-global _chatWebSockets
-_chatWebSockets = []
+    from MicroWebSrv2 import *
 
-global _chatLock
-_chatLock = allocate_lock()
+    global _chatWebSockets
+    _chatWebSockets = []
 
-
-def WSJoinChat(webSocket):
-    webSocket.OnTextMessage = OnWSChatTextMsg
-    webSocket.OnClosed = OnWSChatClosed
-    addr = webSocket.Request.UserAddress
-    with _chatLock:
-        _chatWebSockets.append(webSocket)
-        print('[WS] WSJoinChat %s:%s connected' % addr)
-        if messages:
-            webSocket.SendTextMessage(json.dumps(messages))
+    global _chatLock
+    _chatLock = allocate_lock()
 
 
-def OnWebSocketTextMsg(webSocket, message):
-    print('[WS] OnWebSocketTextMsg message: %s' % message)
-    # addMessage(json.loads(message)) NOTE: are these needed, when does this fire?
-    # lora.println(message)
-    webSocket.SendTextMessage(message)
+    def WSJoinChat(webSocket):
+        webSocket.OnTextMessage = OnWSChatTextMsg
+        webSocket.OnClosed = OnWSChatClosed
+        addr = webSocket.Request.UserAddress
+        with _chatLock:
+            _chatWebSockets.append(webSocket)
+            print('[WS] WSJoinChat %s:%s connected' % addr)
+            if messages:
+                webSocket.SendTextMessage(json.dumps(messages))
 
 
-def OnWebSocketBinaryMsg(webSocket, msg):
-    print('WebSocket binary message: %s' % msg)
+    def OnWebSocketTextMsg(webSocket, message):
+        print('[WS] OnWebSocketTextMsg message: %s' % message)
+        # addMessage(json.loads(message)) NOTE: are these needed, when does this fire?
+        # lora.println(message)
+        webSocket.SendTextMessage(message)
 
 
-def OnWSChatTextMsg(webSocket, message):
-    print('[WS] OnWSChatTextMsg message: %s' % message)
-    lora.println(message)  # Send message over Lora
-    addMessage(json.loads(message))  # Add message to local array and storage
-    if ble_peripheral.is_connected():
-        ble_peripheral.send(message)  # Send message over BLE
-    with _chatLock:  # Send message to all other web sockets
-        for ws in _chatWebSockets:
-            ws.SendTextMessage(message)
+    def OnWebSocketBinaryMsg(webSocket, msg):
+        print('WebSocket binary message: %s' % msg)
 
 
-def OnWSChatClosed(webSocket):
-    addr = webSocket.Request.UserAddress
-    print('[WS] OnWSChatClosed message:  %s:%s' % addr)
-    with _chatLock:
-        if webSocket in _chatWebSockets:
-            _chatWebSockets.remove(webSocket)
+    def OnWSChatTextMsg(webSocket, message):
+        print('[WS] OnWSChatTextMsg message: %s' % message)
+        lora.println(message)  # Send message over Lora
+        addMessage(json.loads(message))  # Add message to local array and storage
+        if ble_peripheral.is_connected():
+            ble_peripheral.send(message)  # Send message over BLE
+        SendAllWSChatMsg(message)
 
 
-def OnWebSocketClosed(webSocket):
-    print('[WS] OnWebSocketClosed %s:%s closed' % webSocket.Request.UserAddress)
+    def OnWSChatClosed(webSocket):
+        addr = webSocket.Request.UserAddress
+        print('[WS] OnWSChatClosed message:  %s:%s' % addr)
+        with _chatLock:
+            if webSocket in _chatWebSockets:
+                _chatWebSockets.remove(webSocket)
 
 
-def OnWebSocketAccepted(microWebSrv2, webSocket):
-    print('Example WebSocket accepted:')
-    print('   - User   : %s:%s' % webSocket.Request.UserAddress)
-    print('   - Path   : %s' % webSocket.Request.Path)
-    print('   - Origin : %s' % webSocket.Request.Origin)
-    if webSocket.Request.Path.lower() == '/wschat':
-        WSJoinChat(webSocket)
-    else:
-        webSocket.OnTextMessage = OnWebSocketTextMsg
-        webSocket.OnBinaryMessage = OnWebSocketBinaryMsg
-        webSocket.OnClosed = OnWebSocketClosed
+    def OnWebSocketClosed(webSocket):
+        print('[WS] OnWebSocketClosed %s:%s closed' % webSocket.Request.UserAddress)
+
+
+    def OnWebSocketAccepted(microWebSrv2, webSocket):
+        print('Example WebSocket accepted:')
+        print('   - User   : %s:%s' % webSocket.Request.UserAddress)
+        print('   - Path   : %s' % webSocket.Request.Path)
+        print('   - Origin : %s' % webSocket.Request.Origin)
+        if webSocket.Request.Path.lower() == '/wschat':
+            WSJoinChat(webSocket)
+        else:
+            webSocket.OnTextMessage = OnWebSocketTextMsg
+            webSocket.OnBinaryMessage = OnWebSocketBinaryMsg
+            webSocket.OnClosed = OnWebSocketClosed
+
+    # Send chat message to all WS clients
+    def SendAllWSChatMsg(message):
+        with _chatLock:
+            for ws in _chatWebSockets:
+                ws.SendTextMessage(message)
 
 
 if __name__ == '__main__':
-    # Loads the WebSockets module globally and configure it,
-    wsMod = MicroWebSrv2.LoadModule('WebSockets')
-    wsMod.OnWebSocketAccepted = OnWebSocketAccepted
+    if WEBSERVER_ENABLED:
+        # Loads the WebSockets module globally and configure it,
+        wsMod = MicroWebSrv2.LoadModule('WebSockets')
+        wsMod.OnWebSocketAccepted = OnWebSocketAccepted
 
-    # Instantiates the MicroWebSrv2 class,
-    mws2 = MicroWebSrv2()
-    mws2.AllowAllOrigins = True  # TODO: remove after testing
-    mws2.CORSAllowAll = True  # TODO: remove after testing
+        # Instantiates the MicroWebSrv2 class,
+        mws2 = MicroWebSrv2()
+        mws2.AllowAllOrigins = True  # TODO: remove after testing
+        mws2.CORSAllowAll = True  # TODO: remove after testing
 
-    # For embedded MicroPython, use a very light configuration,
-    mws2.SetEmbeddedConfig()
+        # For embedded MicroPython, use a very light configuration,
+        mws2.SetEmbeddedConfig()
 
-    # All pages not found will be redirected to the home '/',
-    # mws2.NotFoundURL = '/'
+        # All pages not found will be redirected to the home '/',
+        # mws2.NotFoundURL = '/'
 
-    # Starts the server as easily as possible in managed mode,
-    mws2.StartManaged()
-    # Main program loop until keyboard interrupt,
+        # Starts the server as easily as possible in managed mode,
+        mws2.StartManaged()
+        # Main program loop until keyboard interrupt,
     try:
         while True:
             onLoraRX()
