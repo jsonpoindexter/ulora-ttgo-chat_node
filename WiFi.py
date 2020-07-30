@@ -5,7 +5,7 @@ import network
 def init():
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
-    wlan.connect('***REMOVED***', '***REMOVED***')
+    wlan.connect('SSID', 'PASSWORD')
     while wlan.isconnected() == False:
         pass
 
