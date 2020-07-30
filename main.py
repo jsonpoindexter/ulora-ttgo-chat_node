@@ -5,6 +5,7 @@ from time import sleep
 import config_lora
 from machine import Pin, SPI
 from sx127x import SX127x
+
 device_pins = {
     'miso': 19,
     'mosi': 27,
@@ -41,11 +42,10 @@ def onLoraRX():
         # Send messageObj over BLE
         if ble_peripheral.is_connected():
             ble_peripheral.send(payload)
-        with _chatLock:  # Send message to all other web sockets
-            print('onLoraRX send over websockets ', _chatWebSockets)
-            print('send ws payload ', payload)
+        with _chatLock:  # Send message to all other web sockets NOTE: repeated code
             for ws in _chatWebSockets:
                 ws.SendTextMessage(payload.decode("utf-8"))
+
 
 ########## MESSAGES ##########
 MAX_MESSAGES_LENGTH = 30
@@ -89,25 +89,25 @@ from BLEPeripheral import *
 from ble_advertising import advertising_payload
 
 ble = bluetooth.BLE()
-ble_peripheral = BLESPeripheral(ble, "ulora2")
+ble_peripheral = BLESPeripheral(ble, "ulora")
 
 
-def on_rx(value):
+def on_ble_rx(value):
     print("[BLE] Received Message: ", value)
     payload = str(value, 'utf-8')
-    print('on_rx: ', payload)
-    lora.println(payload)  # Send message over Lora
-    print('on_rx sent over lora')
-    addMessage(json.loads(payload))  # Add message to local array and storage
-    print("on_rx added to messages")
-    with _chatLock:  # Send message to all other web sockets
-        print('onLoraRX send over websockets ', _chatWebSockets)
-        print('send ws payload ', payload)
-        for ws in _chatWebSockets:
-            ws.SendTextMessage(payload)
+    if payload == "ALL":  # Received request to TX all messages
+        for message in messages:
+            print("[BLE] sending message: ", json.dumps(message))
+            ble_peripheral.send(json.dumps(message))
+    else:  # Received a normal message
+        lora.println(payload)  # Send message over Lora
+        addMessage(json.loads(payload))  # Add message to local array and storage
+        with _chatLock:  # Send message to all other web sockets NOTE: repeated code
+            for ws in _chatWebSockets:
+                ws.SendTextMessage(payload)
 
 
-ble_peripheral.on_write(on_rx)
+ble_peripheral.on_write(on_ble_rx)
 
 ########## WEB SERVER ##########
 WEBSERVER_ENABLED = False  # Used to enable/disable web server
@@ -159,11 +159,10 @@ def OnWSChatTextMsg(webSocket, message):
     lora.println(message)  # Send message over Lora
     addMessage(json.loads(message))  # Add message to local array and storage
     if ble_peripheral.is_connected():
-        ble_peripheral.send(message)    # Send message over BLE
-    with _chatLock: # Send message to all other web sockets
+        ble_peripheral.send(message)  # Send message over BLE
+    with _chatLock:  # Send message to all other web sockets
         for ws in _chatWebSockets:
             ws.SendTextMessage(message)
-
 
 
 def OnWSChatClosed(webSocket):
@@ -189,6 +188,7 @@ def OnWebSocketAccepted(microWebSrv2, webSocket):
         webSocket.OnTextMessage = OnWebSocketTextMsg
         webSocket.OnBinaryMessage = OnWebSocketBinaryMsg
         webSocket.OnClosed = OnWebSocketClosed
+
 
 if __name__ == '__main__':
     # Loads the WebSockets module globally and configure it,

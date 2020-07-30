@@ -43,11 +43,11 @@ class BLESPeripheral:
         # Track connections so we can send notifications.
         if event == _IRQ_CENTRAL_CONNECT:
             conn_handle, _, _, = data
-            print("New connection", conn_handle)
+            print("[BLE] New connection", conn_handle)
             self._connections.add(conn_handle)
         elif event == _IRQ_CENTRAL_DISCONNECT:
             conn_handle, _, _, = data
-            print("Disconnected", conn_handle)
+            print("[BLE] Disconnected", conn_handle)
             self._connections.remove(conn_handle)
             # Start advertising again to allow a new connection.
             self._advertise()
@@ -65,48 +65,9 @@ class BLESPeripheral:
         return len(self._connections) > 0
 
     def _advertise(self, interval_us=500000):
-        print("Starting advertising")
+        print("[BLE] Starting advertising")
         self._ble.gap_advertise(interval_us, adv_data=self._payload)
 
     def on_write(self, callback):
         self._write_callback = callback
-
-# def demo():
-#     ble = bluetooth.BLE()
-#     p = BLESPeripheral(ble)
-#
-#     def on_rx(v):
-#         print("RX", v)
-#
-#     p.on_write(on_rx)
-#
-#     i = 0
-#     while True:
-#         if p.is_connected():
-#             data = json.dumps(messages[i])
-#             print("TX", data)
-#             p.send(data)
-#             i += 1
-#             if i >= len(messages):
-#                 i = 0
-#         time.sleep_ms(5000)
-#
-#
-# if __name__ == "__main__":
-#     demo()
-
-
-#NOTE:
-# When messageObj:
-#   RxWebSocket ->
-#       [X] TxLora
-#       [X] TxBLE if peripheral is connected
-#       [X] TxWebSocket for each client
-#       [X] addMessage()
-#   RxLora ->
-#       [x] TxBLE if peripheral is connected
-#       [] TxWebSocket for each client
-#       [] addMessage()
-#
-#
 
