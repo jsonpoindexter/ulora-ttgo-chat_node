@@ -44,7 +44,8 @@ def onLoraRX():
         if ble_peripheral.is_connected():
             ble_peripheral.send(payload)
         # Send message to all web sockets
-        SendAllWSChatMsg(payload.decode("utf-8"))
+        if WEBSERVER_ENABLED:
+            SendAllWSChatMsg(payload.decode("utf-8"))
 
 
 ########## MESSAGES ##########
@@ -103,7 +104,8 @@ def on_ble_rx(value):
         lora.println(payload)  # Send message over Lora
         addMessage(json.loads(payload))  # Add message to local array and storage
         # Send message to all web sockets
-        SendAllWSChatMsg(payload)
+        if WEBSERVER_ENABLED:
+            SendAllWSChatMsg(payload)
 
 
 ble_peripheral.on_write(on_ble_rx)
