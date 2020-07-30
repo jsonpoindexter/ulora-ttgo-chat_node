@@ -6,7 +6,7 @@
     // 2	CLOSING	The connection is in the process of closing.
     // 3	CLOSED
     let webSocketState
-    let baseUrl = '192.168.1.78' // base url used for dev
+    let baseUrl = '' // base url used for dev
     let webSocket
     let messageObjs = [] // current chat messages
     let message = window.localStorage.getItem('message') // current message to send

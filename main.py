@@ -1,4 +1,6 @@
 import machine, json, gc
+
+########## LORA ##########
 from time import sleep
 import config_lora
 from machine import Pin, SPI
@@ -25,8 +27,28 @@ try:
 except:
     machine.reset()
 
-MAX_MESSAGES_LENGTH = 30
 
+def onLoraRX():
+    if lora.received_packet():
+        lora.blink_led()
+        payload = lora.read_payload()
+        print('[LORA] received payload: ', payload)
+        try:
+            payload_obj = json.loads(payload)
+            addMessage(payload_obj)
+        except (Exception, TypeError) as error:
+            print("[LORA] Error parsing JSON payload: ", error)
+        # Send messageObj over BLE
+        if ble_peripheral.is_connected():
+            ble_peripheral.send(payload)
+        with _chatLock:  # Send message to all other web sockets
+            print('onLoraRX send over websockets ', _chatWebSockets)
+            print('send ws payload ', payload)
+            for ws in _chatWebSockets:
+                ws.SendTextMessage(payload.decode("utf-8"))
+
+########## MESSAGES ##########
+MAX_MESSAGES_LENGTH = 30
 messages = []
 # Load store message objs from file in array
 try:
@@ -38,17 +60,20 @@ try:
 except Exception as error:
     print(error)
 
-# WIFI Stuff
-import network
 
-wlan = network.WLAN(network.STA_IF)
-wlan.active(True)
-wlan.connect('***REMOVED***', '***REMOVED***')
-while wlan.isconnected() == False:
-    pass
-
-print('Connection successful')
-print(wlan.ifconfig())
+def addMessage(payload):
+    message = {
+        'timestamp': payload['timestamp'],
+        'message': payload['message'],
+        'sender': payload['sender']
+    }
+    if len(messages) >= MAX_MESSAGES_LENGTH:  # Make sure local messageObj array size is constrained
+        messages.pop(0)
+    messages.append(message)  # Add to local messageObj array
+    # Append to local messageObj persistent storage
+    messagesFile = open('messages.json', 'a')
+    messagesFile.write(json.dumps(message) + '\n')
+    messagesFile.close()
 
 
 #  Helper to find message index
@@ -59,8 +84,52 @@ def find(lst, key, value):
     return -1
 
 
-# WEB SERVER stuff
+########## BLE ##########
+from BLEPeripheral import *
+from ble_advertising import advertising_payload
+
+ble = bluetooth.BLE()
+ble_peripheral = BLESPeripheral(ble, "ulora2")
+
+
+def on_rx(value):
+    print("[BLE] Received Message: ", value)
+    payload = str(value, 'utf-8')
+    print('on_rx: ', payload)
+    lora.println(payload)  # Send message over Lora
+    print('on_rx sent over lora')
+    addMessage(json.loads(payload))  # Add message to local array and storage
+    print("on_rx added to messages")
+    with _chatLock:  # Send message to all other web sockets
+        print('onLoraRX send over websockets ', _chatWebSockets)
+        print('send ws payload ', payload)
+        for ws in _chatWebSockets:
+            ws.SendTextMessage(payload)
+
+
+ble_peripheral.on_write(on_rx)
+
+########## WEB SERVER ##########
+WEBSERVER_ENABLED = False  # Used to enable/disable web server
+# WIFI Setup
+import network
+
+wlan = network.WLAN(network.STA_IF)
+wlan.active(True)
+wlan.connect('***REMOVED***', '***REMOVED***')
+while wlan.isconnected() == False:
+    pass
+
+print('[WLAN] Connection successful')
+print(wlan.ifconfig())
+
 from MicroWebSrv2 import *
+
+global _chatWebSockets
+_chatWebSockets = []
+
+global _chatLock
+_chatLock = allocate_lock()
 
 
 def WSJoinChat(webSocket):
@@ -73,23 +142,28 @@ def WSJoinChat(webSocket):
         if messages:
             webSocket.SendTextMessage(json.dumps(messages))
 
-def OnWebSocketTextMsg(webSocket, message) :
+
+def OnWebSocketTextMsg(webSocket, message):
     print('[WS] OnWebSocketTextMsg message: %s' % message)
-    addMessage(json.loads(message))
-    lora.println(message)
+    # addMessage(json.loads(message)) NOTE: are these needed, when does this fire?
+    # lora.println(message)
     webSocket.SendTextMessage(message)
 
-def OnWebSocketBinaryMsg(webSocket, msg) :
+
+def OnWebSocketBinaryMsg(webSocket, msg):
     print('WebSocket binary message: %s' % msg)
 
 
 def OnWSChatTextMsg(webSocket, message):
     print('[WS] OnWSChatTextMsg message: %s' % message)
-    addMessage(json.loads(message))
-    lora.println(message)
-    with _chatLock:
+    lora.println(message)  # Send message over Lora
+    addMessage(json.loads(message))  # Add message to local array and storage
+    if ble_peripheral.is_connected():
+        ble_peripheral.send(message)    # Send message over BLE
+    with _chatLock: # Send message to all other web sockets
         for ws in _chatWebSockets:
             ws.SendTextMessage(message)
+
 
 
 def OnWSChatClosed(webSocket):
@@ -99,8 +173,10 @@ def OnWSChatClosed(webSocket):
         if webSocket in _chatWebSockets:
             _chatWebSockets.remove(webSocket)
 
+
 def OnWebSocketClosed(webSocket):
     print('[WS] OnWebSocketClosed %s:%s closed' % webSocket.Request.UserAddress)
+
 
 def OnWebSocketAccepted(microWebSrv2, webSocket):
     print('Example WebSocket accepted:')
@@ -113,28 +189,6 @@ def OnWebSocketAccepted(microWebSrv2, webSocket):
         webSocket.OnTextMessage = OnWebSocketTextMsg
         webSocket.OnBinaryMessage = OnWebSocketBinaryMsg
         webSocket.OnClosed = OnWebSocketClosed
-
-global _chatWebSockets
-_chatWebSockets = []
-
-global _chatLock
-_chatLock = allocate_lock()
-
-
-def addMessage(payload):
-    print(messages)
-    if len(messages) >= MAX_MESSAGES_LENGTH:
-        messages.pop(0)
-    message = {
-        'timestamp': payload['timestamp'],
-        'message': payload['message'],
-        'sender': payload['sender']
-    }
-    messages.append(message)
-    messagesFile = open('messages.json', 'a')
-    messagesFile.write(json.dumps(message) + '\n')
-    messagesFile.close()
-
 
 if __name__ == '__main__':
     # Loads the WebSockets module globally and configure it,
@@ -156,16 +210,8 @@ if __name__ == '__main__':
     mws2.StartManaged()
     # Main program loop until keyboard interrupt,
     try:
-        while mws2.IsRunning:
-            if lora.received_packet():
-                lora.blink_led()
-                payload = lora.read_payload()
-                print('[LORA] received payload: ', payload)
-                try:
-                    payload = json.loads(payload)
-                    addMessage(payload)
-                except (Exception, TypeError) as error:
-                    print("[LORA] Error parsing JSON payload: ", error)
+        while True:
+            onLoraRX()
 
 
     except KeyboardInterrupt:
