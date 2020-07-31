@@ -47,15 +47,25 @@ def onLoraRX():
         if WEBSERVER_ENABLED:
             SendAllWSChatMsg(payload.decode("utf-8"))
 
+
 ########## BTREE ##########
 import btree
 
+# Storage of general persistent data
 try:
     dbFile = open("db", "r+b")
 except OSError:
     print('[BTREE] OSError')
     dbFile = open("db", "w+b")
 db = btree.open(dbFile)
+
+# Storage of message objects
+try:
+    messagesDbFile = open("messages.db", "r+b")
+except OSError:
+    print('[BTREE] OSError')
+    messagesDbFile = open("messages.db", "w+b")
+messagesDb = btree.open(messagesDbFile)
 
 
 def byte_str_to_bool(string):
@@ -69,15 +79,9 @@ def byte_str_to_bool(string):
 ########## MESSAGES ##########
 MAX_MESSAGES_LENGTH = 30
 messages = []
-# Load store message objs from file in array
-try:
-    messagesFile = open('messages.json', 'r')
-    for line in messagesFile:
-        messages.append(json.loads(line))
-    messagesFile.close()
-    print("messages: ", messages)
-except Exception as error:
-    print(error)
+for messageStr in messagesDb.values():
+    messages.append(json.loads(messageStr))
+print('Loaded Messages: ', messages)
 
 
 def addMessage(payload):
@@ -87,12 +91,12 @@ def addMessage(payload):
         'sender': payload['sender']
     }
     if len(messages) >= MAX_MESSAGES_LENGTH:  # Make sure local messageObj array size is constrained
-        messages.pop(0)
+        popped = messages.pop(0)  # Pop oldest message from messageObj
+        del messagesDb[str(popped['timestamp']).encode()]  # Remove message from message db
+        messagesDb.flush()
     messages.append(message)  # Add to local messageObj array
-    # Append to local messageObj persistent storage
-    messagesFile = open('messages.json', 'a')
-    messagesFile.write(json.dumps(message) + '\n')
-    messagesFile.close()
+    messagesDb[str(message['timestamp']).encode()] = json.dumps(message)
+    messagesDb.flush()
 
 
 #  Helper to find message index
@@ -131,6 +135,7 @@ ble_peripheral.on_write(on_ble_rx)
 ########## WEB SERVER ##########
 try:
     WEBSERVER_ENABLED = byte_str_to_bool(db[b'WEBSERVER_ENABLED'])  # Used to enable/disable web server
+    db.flush()
 except KeyError:
     print('key error')
     db[b'WEBSERVER_ENABLED'] = b'0'  # btree wont let us use bool
@@ -154,9 +159,10 @@ def on_button_push():
             db.flush()
             db.close()  # close database
             dbFile.close()  # close database file
+            messagesDb.close()
+            messagesDbFile.close()
             if WEBSERVER_ENABLED:  # Stop web server if running
                 mws2.Stop()
-            messagesFile.close()  # close message obj file
             machine.reset()  # restart
 
 
@@ -308,4 +314,7 @@ if __name__ == '__main__':
 
     # End,
     mws2.Stop()
-    messagesFile.close()
+    messagesDbFile.close()
+    messagesDb.close()
+    db.close()
+    dbFile.close()
