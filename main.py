@@ -1,6 +1,24 @@
 import machine, json, gc
 import credentials
 
+########## BTREE ##########
+import btree
+
+try:
+    dbFile = open("db", "r+b")
+except OSError:
+    dbFile = open("db", "w+b")
+db = btree.open(dbFile)
+
+
+def byte_str_to_bool(string):
+    print("int_str_to_bool ", string)
+    if string == b'0':
+        return False
+    else:
+        return True
+
+
 ########## LORA ##########
 from time import sleep
 import config_lora
@@ -111,7 +129,34 @@ def on_ble_rx(value):
 ble_peripheral.on_write(on_ble_rx)
 
 ########## WEB SERVER ##########
-WEBSERVER_ENABLED = False  # Used to enable/disable web server
+try:
+    WEBSERVER_ENABLED = byte_str_to_bool(db[b'WEBSERVER_ENABLED'])  # Used to enable/disable web server
+except KeyError:
+    db[b'WEBSERVER_ENABLED'] = b'0'  # btree wont let us use bool
+    db.flush()
+    WEBSERVER_ENABLED = False
+button = Pin(0, Pin.IN, Pin.PULL_UP)  # onboard momentary push button, True when open / False when closed
+prev_button_value = False
+
+
+# Toggle WEBSERVER_ENABLE and restart on button push
+# TODO: toggle WIFI without restart
+def on_button_push():
+    global prev_button_value
+    button_value = button.value()
+    if button_value != prev_button_value:
+        prev_button_value = button_value
+        if not button_value:
+            print(button_value)
+            db[b'WEBSERVER_ENABLED'] = b'1' if not WEBSERVER_ENABLED else b'0'  # toggle value
+            db.flush()
+            db.close()  # close database
+            dbFile.close()  # close database file
+            if WEBSERVER_ENABLED:  # Stop web server if running
+                mws2.Stop()
+            messagesFile.close()  # close message obj file
+            machine.reset()  # restart
+
 
 if WEBSERVER_ENABLED:
     # WIFI Setup
@@ -190,12 +235,12 @@ if WEBSERVER_ENABLED:
             webSocket.OnBinaryMessage = OnWebSocketBinaryMsg
             webSocket.OnClosed = OnWebSocketClosed
 
+
     # Send chat message to all WS clients
     def SendAllWSChatMsg(message):
         with _chatLock:
             for ws in _chatWebSockets:
                 ws.SendTextMessage(message)
-
 
 if __name__ == '__main__':
     if WEBSERVER_ENABLED:
@@ -220,6 +265,7 @@ if __name__ == '__main__':
     try:
         while True:
             onLoraRX()
+            on_button_push()
 
 
     except KeyboardInterrupt:
