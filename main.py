@@ -1,23 +1,6 @@
 import machine, json, gc
 import credentials
 
-########## BTREE ##########
-import btree
-
-try:
-    dbFile = open("db", "r+b")
-except OSError:
-    dbFile = open("db", "w+b")
-db = btree.open(dbFile)
-
-
-def byte_str_to_bool(string):
-    if string == b'0':
-        return False
-    else:
-        return True
-
-
 ########## LORA ##########
 from time import sleep
 import config_lora
@@ -63,6 +46,24 @@ def onLoraRX():
         # Send message to all web sockets
         if WEBSERVER_ENABLED:
             SendAllWSChatMsg(payload.decode("utf-8"))
+
+########## BTREE ##########
+import btree
+
+try:
+    dbFile = open("db", "r+b")
+except OSError:
+    print('[BTREE] OSError')
+    dbFile = open("db", "w+b")
+db = btree.open(dbFile)
+
+
+def byte_str_to_bool(string):
+    print('byte_str_to_bool: ', string)
+    if string == b'0':
+        return False
+    else:
+        return True
 
 
 ########## MESSAGES ##########
@@ -141,13 +142,14 @@ prev_button_value = False
 
 # Toggle WEBSERVER_ENABLE and restart on button push
 # TODO: toggle WIFI without restart
+# TODO: implement press/hold
 def on_button_push():
     global prev_button_value
     button_value = button.value()
     if button_value != prev_button_value:
         prev_button_value = button_value
         if not button_value:
-            print(button_value)
+            print('setting WEBSERVER_ENABLED: ', b'1' if not WEBSERVER_ENABLED else b'0')
             db[b'WEBSERVER_ENABLED'] = b'1' if not WEBSERVER_ENABLED else b'0'  # toggle value
             db.flush()
             db.close()  # close database
@@ -158,6 +160,19 @@ def on_button_push():
             machine.reset()  # restart
 
 
+def startAccessPoint():
+    global WEBSERVER_ENABLED
+    global wlan
+    wlan = network.WLAN(network.AP_IF)
+    wlan.active(True)
+    wlan.config(essid=credentials.WIFI_AP['SSID'], password=credentials.WIFI_AP['PASSWORD'],
+                authmode=network.AUTH_WPA_WPA2_PSK)
+    # TODO: check if there is a better way than time out
+    total_time = 5000  # Give wifi 5 seconds to start AP
+    start_time = time.ticks_ms()
+    while not wlan.active() and (time.ticks_ms() - start_time) < total_time:
+        pass
+
 if WEBSERVER_ENABLED:
     # WIFI Setup
     import network
@@ -167,87 +182,100 @@ if WEBSERVER_ENABLED:
         print("let connect")
         wlan = network.WLAN(network.STA_IF)
         wlan.active(True)
+        print(credentials.WIFI_STA['SSID'], credentials.WIFI_STA['PASSWORD'])
         wlan.connect(credentials.WIFI_STA['SSID'], credentials.WIFI_STA['PASSWORD'])
-        attempts = 0
-        while not wlan.isconnected() and attempts < 5:
-            print('[WIFI] Attempt to connect to ', credentials.WIFI_STA['SSID'], ' #', attempts + 1)
-            attempts += 1
-            sleep(.5)
+        total_time = 5000  # Give wifi 5 seconds to connect
+        start_time = time.ticks_ms()
+        while wlan.status() == 'STAT_CONNECTING':
+            print(wlan.status())
             pass
+        # Start ip an Access Point
+        if not wlan.isconnected():
+            wlan.active(False)
+            startAccessPoint()
+    else:
+        startAccessPoint()
 
+    # If we cant host an AP or connect to WIFI then no need for web server
+    if not wlan.active() and not wlan.isconnected():
+        print('wifi error: ', wlan.active(), wlan.isconnected())
+        WEBSERVER_ENABLED = False
+        db[b'WEBSERVER_ENABLED'] = b'0'
+        db.flush()
+    else:
         print('[WLAN] Connection successful')
         print(wlan.ifconfig())
 
-    from MicroWebSrv2 import *
+        from MicroWebSrv2 import *
 
-    global _chatWebSockets
-    _chatWebSockets = []
+        global _chatWebSockets
+        _chatWebSockets = []
 
-    global _chatLock
-    _chatLock = allocate_lock()
-
-
-    def WSJoinChat(webSocket):
-        webSocket.OnTextMessage = OnWSChatTextMsg
-        webSocket.OnClosed = OnWSChatClosed
-        addr = webSocket.Request.UserAddress
-        with _chatLock:
-            _chatWebSockets.append(webSocket)
-            print('[WS] WSJoinChat %s:%s connected' % addr)
-            if messages:
-                webSocket.SendTextMessage(json.dumps(messages))
+        global _chatLock
+        _chatLock = allocate_lock()
 
 
-    def OnWebSocketTextMsg(webSocket, message):
-        print('[WS] OnWebSocketTextMsg message: %s' % message)
-        # addMessage(json.loads(message)) NOTE: are these needed, when does this fire?
-        # lora.println(message)
-        webSocket.SendTextMessage(message)
+        def WSJoinChat(webSocket):
+            webSocket.OnTextMessage = OnWSChatTextMsg
+            webSocket.OnClosed = OnWSChatClosed
+            addr = webSocket.Request.UserAddress
+            with _chatLock:
+                _chatWebSockets.append(webSocket)
+                print('[WS] WSJoinChat %s:%s connected' % addr)
+                if messages:
+                    webSocket.SendTextMessage(json.dumps(messages))
 
 
-    def OnWebSocketBinaryMsg(webSocket, msg):
-        print('WebSocket binary message: %s' % msg)
+        def OnWebSocketTextMsg(webSocket, message):
+            print('[WS] OnWebSocketTextMsg message: %s' % message)
+            # addMessage(json.loads(message)) NOTE: are these needed, when does this fire?
+            # lora.println(message)
+            webSocket.SendTextMessage(message)
 
 
-    def OnWSChatTextMsg(webSocket, message):
-        print('[WS] OnWSChatTextMsg message: %s' % message)
-        lora.println(message)  # Send message over Lora
-        addMessage(json.loads(message))  # Add message to local array and storage
-        if ble_peripheral.is_connected():
-            ble_peripheral.send(message)  # Send message over BLE
-        SendAllWSChatMsg(message)
+        def OnWebSocketBinaryMsg(webSocket, msg):
+            print('WebSocket binary message: %s' % msg)
 
 
-    def OnWSChatClosed(webSocket):
-        addr = webSocket.Request.UserAddress
-        print('[WS] OnWSChatClosed message:  %s:%s' % addr)
-        with _chatLock:
-            if webSocket in _chatWebSockets:
-                _chatWebSockets.remove(webSocket)
+        def OnWSChatTextMsg(webSocket, message):
+            print('[WS] OnWSChatTextMsg message: %s' % message)
+            lora.println(message)  # Send message over Lora
+            addMessage(json.loads(message))  # Add message to local array and storage
+            if ble_peripheral.is_connected():
+                ble_peripheral.send(message)  # Send message over BLE
+            SendAllWSChatMsg(message)
 
 
-    def OnWebSocketClosed(webSocket):
-        print('[WS] OnWebSocketClosed %s:%s closed' % webSocket.Request.UserAddress)
+        def OnWSChatClosed(webSocket):
+            addr = webSocket.Request.UserAddress
+            print('[WS] OnWSChatClosed message:  %s:%s' % addr)
+            with _chatLock:
+                if webSocket in _chatWebSockets:
+                    _chatWebSockets.remove(webSocket)
 
 
-    def OnWebSocketAccepted(microWebSrv2, webSocket):
-        print('Example WebSocket accepted:')
-        print('   - User   : %s:%s' % webSocket.Request.UserAddress)
-        print('   - Path   : %s' % webSocket.Request.Path)
-        print('   - Origin : %s' % webSocket.Request.Origin)
-        if webSocket.Request.Path.lower() == '/wschat':
-            WSJoinChat(webSocket)
-        else:
-            webSocket.OnTextMessage = OnWebSocketTextMsg
-            webSocket.OnBinaryMessage = OnWebSocketBinaryMsg
-            webSocket.OnClosed = OnWebSocketClosed
+        def OnWebSocketClosed(webSocket):
+            print('[WS] OnWebSocketClosed %s:%s closed' % webSocket.Request.UserAddress)
 
 
-    # Send chat message to all WS clients
-    def SendAllWSChatMsg(message):
-        with _chatLock:
-            for ws in _chatWebSockets:
-                ws.SendTextMessage(message)
+        def OnWebSocketAccepted(microWebSrv2, webSocket):
+            print('Example WebSocket accepted:')
+            print('   - User   : %s:%s' % webSocket.Request.UserAddress)
+            print('   - Path   : %s' % webSocket.Request.Path)
+            print('   - Origin : %s' % webSocket.Request.Origin)
+            if webSocket.Request.Path.lower() == '/wschat':
+                WSJoinChat(webSocket)
+            else:
+                webSocket.OnTextMessage = OnWebSocketTextMsg
+                webSocket.OnBinaryMessage = OnWebSocketBinaryMsg
+                webSocket.OnClosed = OnWebSocketClosed
+
+
+        # Send chat message to all WS clients
+        def SendAllWSChatMsg(message):
+            with _chatLock:
+                for ws in _chatWebSockets:
+                    ws.SendTextMessage(message)
 
 if __name__ == '__main__':
     if WEBSERVER_ENABLED:
