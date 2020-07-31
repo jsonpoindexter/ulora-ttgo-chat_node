@@ -12,7 +12,6 @@ db = btree.open(dbFile)
 
 
 def byte_str_to_bool(string):
-    print("int_str_to_bool ", string)
     if string == b'0':
         return False
     else:
@@ -132,6 +131,7 @@ ble_peripheral.on_write(on_ble_rx)
 try:
     WEBSERVER_ENABLED = byte_str_to_bool(db[b'WEBSERVER_ENABLED'])  # Used to enable/disable web server
 except KeyError:
+    print('key error')
     db[b'WEBSERVER_ENABLED'] = b'0'  # btree wont let us use bool
     db.flush()
     WEBSERVER_ENABLED = False
@@ -162,14 +162,21 @@ if WEBSERVER_ENABLED:
     # WIFI Setup
     import network
 
-    wlan = network.WLAN(network.STA_IF)
-    wlan.active(True)
-    wlan.connect(credentials.WIFI['SSID'], credentials.WIFI['PASSWORD'])
-    while wlan.isconnected() == False:
-        pass
+    # Try to connect to WiFi if Station SSID is specified
+    if credentials.WIFI_STA['SSID']:
+        print("let connect")
+        wlan = network.WLAN(network.STA_IF)
+        wlan.active(True)
+        wlan.connect(credentials.WIFI_STA['SSID'], credentials.WIFI_STA['PASSWORD'])
+        attempts = 0
+        while not wlan.isconnected() and attempts < 5:
+            print('[WIFI] Attempt to connect to ', credentials.WIFI_STA['SSID'], ' #', attempts + 1)
+            attempts += 1
+            sleep(.5)
+            pass
 
-    print('[WLAN] Connection successful')
-    print(wlan.ifconfig())
+        print('[WLAN] Connection successful')
+        print(wlan.ifconfig())
 
     from MicroWebSrv2 import *
 
