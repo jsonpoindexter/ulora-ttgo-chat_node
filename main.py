@@ -80,7 +80,10 @@ def byte_str_to_bool(string):
 MAX_MESSAGES_LENGTH = 30
 messages = []
 for messageStr in messagesDb.values():
-    messages.append(json.loads(messageStr))
+    try:
+        messages.append(json.loads(messageStr))
+    except Exception as error:
+        print('[Startup] error load messageObj from btree', error)
 print('Loaded Messages: ', messages)
 
 
