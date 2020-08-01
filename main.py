@@ -23,9 +23,22 @@ device_spi = SPI(baudrate=10000000,
                  mosi=Pin(device_pins['mosi'], Pin.OUT, Pin.PULL_UP),
                  miso=Pin(device_pins['miso'], Pin.IN, Pin.PULL_UP))
 
+parameters = {
+    'frequency': 868E6,
+    'tx_power_level': 2,
+    'signal_bandwidth': 125E3,
+    'spreading_factor': 8,
+    'coding_rate': 5,
+    'preamble_length': 8,
+    'implicit_header': False,
+    'sync_word': 0x12,
+    'enable_CRC': False,
+    'invert_IQ': False,
+}
+
 # Restart machine if we get the 'invalid version' error
 try:
-    lora = SX127x(device_spi, pins=device_pins)
+    lora = SX127x(device_spi, pins=device_pins, parameters=parameters)
 except:
     machine.reset()
 
