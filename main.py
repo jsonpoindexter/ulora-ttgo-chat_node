@@ -85,18 +85,21 @@ print('Loaded Messages: ', messages)
 
 
 def addMessage(payload):
-    message = {
-        'timestamp': payload['timestamp'],
-        'message': payload['message'],
-        'sender': payload['sender']
-    }
-    if len(messages) >= MAX_MESSAGES_LENGTH:  # Make sure local messageObj array size is constrained
-        popped = messages.pop(0)  # Pop oldest message from messageObj
-        del messagesDb[str(popped['timestamp']).encode()]  # Remove message from message db
+    try:
+        message = {
+            'timestamp': payload['timestamp'],
+            'message': payload['message'],
+            'sender': payload['sender']
+        }
+        if len(messages) >= MAX_MESSAGES_LENGTH:  # Make sure local messageObj array size is constrained
+            popped = messages.pop(0)  # Pop oldest message from messageObj
+            del messagesDb[str(popped['timestamp']).encode()]  # Remove message from message db
+            messagesDb.flush()
+        messages.append(message)  # Add to local messageObj array
+        messagesDb[str(message['timestamp']).encode()] = json.dumps(message)
         messagesDb.flush()
-    messages.append(message)  # Add to local messageObj array
-    messagesDb[str(message['timestamp']).encode()] = json.dumps(message)
-    messagesDb.flush()
+    except Exception as error:
+        print('[addMessage] ', error)
 
 
 #  Helper to find message index
@@ -116,18 +119,21 @@ ble_peripheral = BLESPeripheral(ble, "ulora")
 
 
 def on_ble_rx(value):
-    print("[BLE] Received Message: ", value)
-    payload = str(value, 'utf-8')
-    if payload == "ALL":  # Received request to TX all messages
-        for message in messages:
-            print("[BLE] sending message: ", json.dumps(message))
-            ble_peripheral.send(json.dumps(message))
-    else:  # Received a normal message
-        lora.println(payload)  # Send message over Lora
-        addMessage(json.loads(payload))  # Add message to local array and storage
-        # Send message to all web sockets
-        if WEBSERVER_ENABLED:
-            SendAllWSChatMsg(payload)
+    try:
+        print("[BLE] Received Message: ", value)
+        payload = str(value, 'utf-8')
+        if payload == "ALL":  # Received request to TX all messages
+            for message in messages:
+                print("[BLE] sending message: ", json.dumps(message))
+                ble_peripheral.send(json.dumps(message))
+        else:  # Received a normal message
+            lora.println(payload)  # Send message over Lora
+            addMessage(json.loads(payload))  # Add message to local array and storage
+            # Send message to all web sockets
+            if WEBSERVER_ENABLED:
+                SendAllWSChatMsg(payload)
+    except Exception as error:
+        print('[on_ble_rx] ', error)
 
 
 ble_peripheral.on_write(on_ble_rx)
