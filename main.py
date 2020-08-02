@@ -45,6 +45,7 @@ parameters = {
 try:
     lora = SX127x(device_spi, pins=device_pins, parameters=parameters)
 except:
+    sleep(1)  # this try/except can get caught in an uninterruptible loop, sleep gives us a chance
     machine.reset()
 
 
