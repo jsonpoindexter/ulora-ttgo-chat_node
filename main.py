@@ -194,35 +194,33 @@ def on_button_push():
                 mws2.Stop()
             machine.reset()  # restart
 
-
-def startAccessPoint():
-    global WEBSERVER_ENABLED
-    global wlan
-    wlan = network.WLAN(network.AP_IF)
-    wlan.active(True)
-    wlan.config(essid=credentials.WIFI_AP['SSID'], password=credentials.WIFI_AP['PASSWORD'],
-                authmode=network.AUTH_WPA_WPA2_PSK)
-    # TODO: check if there is a better way than time out
-    total_time = 5000  # Give wifi 5 seconds to start AP
-    start_time = time.ticks_ms()
-    while not wlan.active() and (time.ticks_ms() - start_time) < total_time:
-        pass
-
 if WEBSERVER_ENABLED:
     # WIFI Setup
     import network
 
+
+    def startAccessPoint():
+        global WEBSERVER_ENABLED
+        global wlan
+        wlan = network.WLAN(network.AP_IF)
+        wlan.active(True)
+        wlan.config(essid=credentials.WIFI_AP['SSID'], password=credentials.WIFI_AP['PASSWORD'],
+                    authmode=network.AUTH_WPA_WPA2_PSK)
+        # TODO: check if there is a better way than time out
+        total_time = 5000  # Give wifi 5 seconds to start AP
+        start_time = time.ticks_ms()
+        while not wlan.active() and (time.ticks_ms() - start_time) < total_time:
+            pass
+
+
     # Try to connect to WiFi if Station SSID is specified
     if credentials.WIFI_STA['SSID']:
-        print("let connect")
         wlan = network.WLAN(network.STA_IF)
         wlan.active(True)
-        print(credentials.WIFI_STA['SSID'], credentials.WIFI_STA['PASSWORD'])
         wlan.connect(credentials.WIFI_STA['SSID'], credentials.WIFI_STA['PASSWORD'])
         total_time = 5000  # Give wifi 5 seconds to connect
         start_time = time.ticks_ms()
-        while wlan.status() == 'STAT_CONNECTING':
-            print(wlan.status())
+        while wlan.status() == network.STAT_CONNECTING and (time.ticks_ms() - start_time) < total_time:
             pass
         # Start ip an Access Point
         if not wlan.isconnected():
