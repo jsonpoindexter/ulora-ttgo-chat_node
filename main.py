@@ -312,6 +312,10 @@ if WEBSERVER_ENABLED:
                 for ws in _chatWebSockets:
                     ws.SendTextMessage(message)
 
+gc.collect()
+print('[Memory - free: {}   allocated: {}]'.format(gc.mem_free(), gc.mem_alloc()))
+
+messageCount = 0
 if __name__ == '__main__':
     if WEBSERVER_ENABLED:
         # Loads the WebSockets module globally and configure it,
@@ -334,7 +338,20 @@ if __name__ == '__main__':
         # Main program loop until keyboard interrupt,
     try:
         while True:
-            onLoraRX()
+            if IS_BEACON:
+                messageCount += 1
+                messageObj = {
+                    "timestamp": time.ticks_ms(),
+                    "message": 'Message #' + str(messageCount),
+                    "sender": "BEACON"
+                }
+                print('[LORA] send payload: ', messageObj)
+                print('[LORA] RSSI: ', lora.packet_rssi())
+
+                lora.println(json.dumps(messageObj))
+                sleep(5)
+            else:
+                onLoraRX()
             on_button_push()
 
 
