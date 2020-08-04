@@ -149,6 +149,8 @@ if BLE_ENABLED:
                 for message in messages:
                     print("[BLE] sending message: ", json.dumps(message))
                     ble_peripheral.send(json.dumps(message))
+                    gc.collect()
+                    print('[Memory - free: {}   allocated: {}]'.format(gc.mem_free(), gc.mem_alloc()))
             else:  # Received a normal message
                 lora.println(payload)  # Send message over Lora
                 addMessage(json.loads(payload))  # Add message to local array and storage
