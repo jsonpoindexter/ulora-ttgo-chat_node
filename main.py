@@ -53,6 +53,7 @@ def onLoraRX():
     if lora.received_packet():
         lora.blink_led()
         payload = lora.read_payload()
+        print('[LORA] RSSI: ', lora.packet_rssi())
         print('[LORA] received payload: ', payload)
         try:
             payload_obj = json.loads(payload)
