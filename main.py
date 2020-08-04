@@ -88,7 +88,6 @@ messagesDb = btree.open(messagesDbFile)
 
 
 def byte_str_to_bool(string):
-    print('byte_str_to_bool: ', string)
     if string == b'0':
         return False
     else:
@@ -196,6 +195,7 @@ def on_button_push():
                 mws2.Stop()
             machine.reset()  # restart
 
+
 if WEBSERVER_ENABLED:
     # WIFI Setup
     import network
@@ -222,7 +222,7 @@ if WEBSERVER_ENABLED:
         wlan.connect(credentials.WIFI_STA['SSID'], credentials.WIFI_STA['PASSWORD'])
         total_time = 5000  # Give wifi 5 seconds to connect
         start_time = time.ticks_ms()
-        while wlan.status() == network.STAT_CONNECTING and (time.ticks_ms() - start_time) < total_time:
+        while wlan.status() != network.STAT_GOT_IP and (time.ticks_ms() - start_time) < total_time:
             pass
         # Start ip an Access Point
         if not wlan.isconnected():
