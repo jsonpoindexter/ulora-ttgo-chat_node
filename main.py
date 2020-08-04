@@ -2,9 +2,9 @@ import machine, json, gc, time
 import credentials
 
 ########## CONSTANTS ##########
-IS_BEACON = False  # Used for testing range
+IS_BEACON = True  # Used for testing range
 BLE_ENABLED = True  # Used for testing
-BLE_NAME = 'ulora'  # Name BLE will use when advertising
+BLE_NAME = 'ulora2' if IS_BEACON else 'ulora'  # Name BLE will use when advertising
 
 ########## LORA ##########
 from time import sleep
