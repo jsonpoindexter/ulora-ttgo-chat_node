@@ -1,9 +1,6 @@
-/node_modules/
-/www/build/
 /.idea/
 
 .DS_Store
 /MicroWebSrv2/
 /uPyLoRaWAN/
-/package-lock.json
 /credentials.py
