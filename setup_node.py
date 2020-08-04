@@ -25,7 +25,7 @@ itemNames = [
     'credentials.py',
     'config_lora.py',
     'www'
-]  # files/directories to be copied over, ( name, is_dir)
+]  # files/directories to be copied over
 
 
 # determine which ampy operation needs to be performed
