@@ -94,6 +94,26 @@ def byte_str_to_bool(string):
         return True
 
 
+########## WEB_SERVER_ENABLED ##########
+try:
+    WEBSERVER_ENABLED = byte_str_to_bool(db[b'WEBSERVER_ENABLED'])  # Used to enable/disable web server
+    db.flush()
+except KeyError:
+    print('key error')
+    db[b'WEBSERVER_ENABLED'] = b'0'  # btree wont let us use bool
+    db.flush()
+    WEBSERVER_ENABLED = False
+button = Pin(0, Pin.IN, Pin.PULL_UP)  # onboard momentary push button, True when open / False when closed
+prev_button_value = False
+
+######### PRINT CONST ########
+print("######### CONFIG VARIABLES ########")
+print("IS_BEACON: ", IS_BEACON)
+print("WEBSERVER_ENABLED: ", WEBSERVER_ENABLED)
+print("BLE_ENABLED: ", BLE_ENABLED)
+print("BLE_NAME: ", BLE_NAME)
+print("######### CONFIG VARIABLES ########")
+
 ########## MESSAGES ##########
 MAX_MESSAGES_LENGTH = 30
 messages = []
@@ -161,18 +181,6 @@ if BLE_ENABLED:
 
 
     ble_peripheral.on_write(on_ble_rx)
-
-########## WEB SERVER ##########
-try:
-    WEBSERVER_ENABLED = byte_str_to_bool(db[b'WEBSERVER_ENABLED'])  # Used to enable/disable web server
-    db.flush()
-except KeyError:
-    print('key error')
-    db[b'WEBSERVER_ENABLED'] = b'0'  # btree wont let us use bool
-    db.flush()
-    WEBSERVER_ENABLED = False
-button = Pin(0, Pin.IN, Pin.PULL_UP)  # onboard momentary push button, True when open / False when closed
-prev_button_value = False
 
 
 # Toggle WEBSERVER_ENABLE and restart on button push
