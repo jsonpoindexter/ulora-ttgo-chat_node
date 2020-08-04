@@ -38,3 +38,21 @@ try:
 except:
     sleep(1)  # this try/except can get caught in an uninterruptible loop, sleep gives us a chance
     reset()
+
+def onLoraRX():
+    if lora.received_packet():
+        lora.blink_led()
+        payload = lora.read_payload()
+        print('[LORA] RSSI: ', lora.packet_rssi())
+        print('[LORA] received payload: ', payload)
+        try:
+            payload_obj = json.loads(payload)
+            addMessage(payload_obj)
+        except (Exception, TypeError) as error:
+            print("[LORA] Error parsing JSON payload: ", error)
+        # Send messageObj over BLE
+        if BLE_ENABLED and ble_peripheral.is_connected():
+            ble_peripheral.send(payload)
+        # Send message to all web sockets
+        if WEBSERVER_ENABLED:
+            SendAllWSChatMsg(payload.decode("utf-8"))
