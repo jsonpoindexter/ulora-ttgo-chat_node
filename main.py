@@ -37,7 +37,7 @@ parameters = {
     'preamble_length': 8,
     'implicit_header': False,
     'sync_word': 0x12,
-    'enable_CRC': False,
+    'enable_CRC': True,
     'invert_IQ': False,
 }
 
