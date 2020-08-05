@@ -1,7 +1,7 @@
 import machine, json, gc, time
+from machine import Pin
 import credentials
 from message_store import MessageStore
-from machine import Pin
 
 ########## CONSTANTS ##########
 IS_BEACON = True  # Used for testing range
@@ -9,11 +9,52 @@ BLE_ENABLED = True  # Used for testing
 BLE_NAME = 'ulora2' if IS_BEACON else 'ulora'  # Name BLE will use when advertising
 
 ########## LORA ##########
-from lora import *
+from config_lora import parameters, device_spi, device_pins
+from sx127x import SX127x
+# Restart machine if we get the 'invalid version' error
+try:
+    lora = SX127x(device_spi, pins=device_pins, parameters=parameters)
+except:
+    time.sleep(1)  # this try/except can get caught in an uninterruptible loop, sleep gives us a chance
+    machine.reset()
+
+def on_lora_rx():
+    if lora.received_packet():
+        lora.blink_led()
+        payload = lora.read_payload()
+        print('[LORA] RSSI: ', lora.packet_rssi())
+        print('[LORA] received payload: ', payload)
+        try:
+            payload_obj = json.loads(payload)
+            message_store.add_message(payload_obj)
+        except (Exception, TypeError) as error:
+            print("[LORA] Error parsing JSON payload: ", error)
+        # Send messageObj over BLE
+        if BLE_ENABLED and ble_peripheral.is_connected():
+            ble_peripheral.send(payload)
+        # Send message to all web sockets
+        if WEBSERVER_ENABLED:
+            SendAllWSChatMsg(payload.decode("utf-8"))
+
 
 
 ########## DATABASE ##########
-from db import *
+import btree
+
+# Storage of general persistent data
+try:
+    dbFile = open("db", "r+b")
+except OSError:
+    print('[BTREE] OSError')
+    dbFile = open("db", "w+b")
+db = btree.open(dbFile)
+
+
+def byte_str_to_bool(string):
+    if string == b'0':
+        return False
+    else:
+        return True
 
 ########## WEB_SERVER_ENABLED ##########
 try:
@@ -250,7 +291,7 @@ if __name__ == '__main__':
                 lora.println(json.dumps(messageObj))
                 sleep(5)
             else:
-                onLoraRX()
+                on_lora_rx()
             on_button_push()
 
 
