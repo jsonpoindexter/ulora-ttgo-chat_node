@@ -11,12 +11,14 @@ BLE_NAME = 'ulora2' if IS_BEACON else 'ulora'  # Name BLE will use when advertis
 ########## LORA ##########
 from config_lora import parameters, device_spi, device_pins
 from sx127x import SX127x
+
 # Restart machine if we get the 'invalid version' error
 try:
     lora = SX127x(device_spi, pins=device_pins, parameters=parameters)
 except:
     time.sleep(1)  # this try/except can get caught in an uninterruptible loop, sleep gives us a chance
     machine.reset()
+
 
 def on_lora_rx():
     if lora.received_packet():
@@ -35,7 +37,6 @@ def on_lora_rx():
         # Send message to all web sockets
         if WEBSERVER_ENABLED:
             SendAllWSChatMsg(payload.decode("utf-8"))
-
 
 
 ########## DATABASE ##########
@@ -76,8 +77,6 @@ print("WEBSERVER_ENABLED: ", WEBSERVER_ENABLED)
 print("BLE_ENABLED: ", BLE_ENABLED)
 print("BLE_NAME: ", BLE_NAME)
 print("######### CONFIG VARIABLES ########")
-
-
 
 ########## MESSAGES ##########
 MAX_MESSAGES_LENGTH = 30  # Max amount of messages we will retain before removing old ones
