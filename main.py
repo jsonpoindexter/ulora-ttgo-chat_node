@@ -1,5 +1,7 @@
 import machine, json, gc, time
 import credentials
+from message_store import MessageStore
+from machine import Pin
 
 ########## CONSTANTS ##########
 IS_BEACON = True  # Used for testing range
@@ -22,6 +24,7 @@ except KeyError:
     db[b'WEBSERVER_ENABLED'] = b'0'  # btree wont let us use bool
     db.flush()
     WEBSERVER_ENABLED = False
+
 button = Pin(0, Pin.IN, Pin.PULL_UP)  # onboard momentary push button, True when open / False when closed
 prev_button_value = False
 
@@ -33,42 +36,12 @@ print("BLE_ENABLED: ", BLE_ENABLED)
 print("BLE_NAME: ", BLE_NAME)
 print("######### CONFIG VARIABLES ########")
 
+
+
 ########## MESSAGES ##########
-MAX_MESSAGES_LENGTH = 30
-messages = []
-for messageStr in messagesDb.values():
-    try:
-        messages.append(json.loads(messageStr))
-    except Exception as error:
-        print('[Startup] error load messageObj from btree', error)
-print('Loaded Messages: ', messages)
-
-
-def addMessage(payload):
-    try:
-        message = {
-            'timestamp': payload['timestamp'],
-            'message': payload['message'],
-            'sender': payload['sender']
-        }
-        if len(messages) >= MAX_MESSAGES_LENGTH:  # Make sure local messageObj array size is constrained
-            popped = messages.pop(0)  # Pop oldest message from messageObj
-            del messagesDb[str(popped['timestamp']).encode()]  # Remove message from message db
-            messagesDb.flush()
-        messages.append(message)  # Add to local messageObj array
-        messagesDb[str(message['timestamp']).encode()] = json.dumps(message)
-        messagesDb.flush()
-    except Exception as error:
-        print('[addMessage] ', error)
-
-
-#  Helper to find message index
-def find(lst, key, value):
-    for i, dic in enumerate(lst):
-        if dic[key] == value:
-            return i
-    return -1
-
+MAX_MESSAGES_LENGTH = 30  # Max amount of messages we will retain before removing old ones
+message_store = MessageStore(MAX_MESSAGES_LENGTH)
+print('Current Messages: ', message_store.messages)
 
 ########## BLE ##########
 if BLE_ENABLED:
@@ -84,14 +57,14 @@ if BLE_ENABLED:
             print("[BLE] Received Message: ", value)
             payload = str(value, 'utf-8')
             if payload == "ALL":  # Received request to TX all messages
-                for message in messages:
+                for message in message_store.messages:
                     print("[BLE] sending message: ", json.dumps(message))
                     ble_peripheral.send(json.dumps(message))
                     gc.collect()
                     print('[Memory - free: {}   allocated: {}]'.format(gc.mem_free(), gc.mem_alloc()))
             else:  # Received a normal message
                 lora.println(payload)  # Send message over Lora
-                addMessage(json.loads(payload))  # Add message to local array and storage
+                message_store.add_message(json.loads(payload))  # Add message to local array and storage
                 # Send message to all web sockets
                 if WEBSERVER_ENABLED:
                     SendAllWSChatMsg(payload)
@@ -116,8 +89,7 @@ def on_button_push():
             db.flush()
             db.close()  # close database
             dbFile.close()  # close database file
-            messagesDb.close()
-            messagesDbFile.close()
+            message_store.close()
             if WEBSERVER_ENABLED:  # Stop web server if running
                 mws2.Stop()
             machine.reset()  # restart
@@ -184,13 +156,13 @@ if WEBSERVER_ENABLED:
             with _chatLock:
                 _chatWebSockets.append(webSocket)
                 print('[WS] WSJoinChat %s:%s connected' % addr)
-                if messages:
-                    webSocket.SendTextMessage(json.dumps(messages))
+                if message_store.messages:
+                    webSocket.SendTextMessage(json.dumps(message_store.messages))
 
 
         def OnWebSocketTextMsg(webSocket, message):
             print('[WS] OnWebSocketTextMsg message: %s' % message)
-            # addMessage(json.loads(message)) NOTE: are these needed, when does this fire?
+            # message_store.add_message(json.loads(message)) NOTE: are these needed, when does this fire?
             # lora.println(message)
             webSocket.SendTextMessage(message)
 
@@ -202,7 +174,7 @@ if WEBSERVER_ENABLED:
         def OnWSChatTextMsg(webSocket, message):
             print('[WS] OnWSChatTextMsg message: %s' % message)
             lora.println(message)  # Send message over Lora
-            addMessage(json.loads(message))  # Add message to local array and storage
+            message_store.add_message(json.loads(message))  # Add message to local array and storage
             if BLE_ENABLED and ble_peripheral.is_connected():
                 ble_peripheral.send(message)  # Send message over BLE
             SendAllWSChatMsg(message)
@@ -287,7 +259,6 @@ if __name__ == '__main__':
 
     # End,
     mws2.Stop()
-    messagesDbFile.close()
-    messagesDb.close()
+    message_store.close()
     db.close()
     dbFile.close()
