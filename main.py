@@ -136,49 +136,19 @@ def on_button_push():
 
 
 if WEBSERVER_ENABLED:
-    # WIFI Setup
-    import network
+    from wlan import WLAN
+    wlan = WLAN()
 
-
-    def startAccessPoint():
-        global WEBSERVER_ENABLED
-        global wlan
-        wlan = network.WLAN(network.AP_IF)
-        wlan.active(True)
-        wlan.config(essid=credentials.WIFI_AP['SSID'], password=credentials.WIFI_AP['PASSWORD'],
-                    authmode=network.AUTH_WPA_WPA2_PSK)
-        # TODO: check if there is a better way than time out
-        total_time = 5000  # Give wifi 5 seconds to start AP
-        start_time = time.ticks_ms()
-        while not wlan.active() and (time.ticks_ms() - start_time) < total_time:
-            pass
-
-
-    # Try to connect to WiFi if Station SSID is specified
-    if credentials.WIFI_STA['SSID']:
-        wlan = network.WLAN(network.STA_IF)
-        wlan.active(True)
-        wlan.connect(credentials.WIFI_STA['SSID'], credentials.WIFI_STA['PASSWORD'])
-        total_time = 5000  # Give wifi 5 seconds to connect
-        start_time = time.ticks_ms()
-        while wlan.status() != network.STAT_GOT_IP and (time.ticks_ms() - start_time) < total_time:
-            pass
-        # Start ip an Access Point
-        if not wlan.isconnected():
-            wlan.active(False)
-            startAccessPoint()
-    else:
-        startAccessPoint()
 
     # If we cant host an AP or connect to WIFI then no need for web server
-    if not wlan.active() and not wlan.isconnected():
-        print('wifi error: ', wlan.active(), wlan.isconnected())
+    if wlan.isNotReady():
+        print('[WIFI] error: active: ', wlan.interface.active(), ' isconnected" ', wlan.interface.isconnected())
         WEBSERVER_ENABLED = False
         db[b'WEBSERVER_ENABLED'] = b'0'
         db.flush()
     else:
         print('[WLAN] Connection successful')
-        print(wlan.ifconfig())
+        print(wlan.interface.ifconfig())
 
         from MicroWebSrv2 import *
 
