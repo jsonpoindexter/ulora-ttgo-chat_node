@@ -46,9 +46,14 @@ def on_lora_rx():
                 # Result: NodeA will receive NodeB's latest message and ONLY the latest message.
                 # If NodeA sends a new message before NodeB can its latest message than NodeA will never receive
                 # NoteB's newest message.
-                if timestamp < message_store.latest_timestamp():
-                    send_lora_message(message_store.messages[len(message_store.messages) - 1])
-
+                message_obj = message_store.latest_message(is_sender=True)  # Get latest sent message
+                if timestamp < message_obj['timestamp']:
+                    message_obj = {  # Do not send 'is_sender' property since its only used locally
+                        'timestamp': message_obj['timestamp'],
+                        'message': message_obj['message'],
+                        'sender': message_obj['sender']
+                    }
+                    send_lora_message(message_obj)
         else:  # Handle user messages
             message_store.add_message(payload_obj)
             # Send messageObj over BLE
@@ -70,13 +75,13 @@ def sync_interval():
 
 
 # TODO: use enum for Type?
-# Send sync packet with the timestamp of the newest messageObj
+# Send sync packet with the timestamp of the latest received message_obj
 def send_lora_sync():
-    messageObj = {
+    message_obj = {
         'type': 'SYN',
-        'timestamp': message_store.latest_timestamp()
+        'timestamp': message_store.latest_message(is_sender=False)
     }
-    send_lora_message(messageObj)
+    send_lora_message(message_obj)
 
 
 # Send a message obj over lora and reset sync time
@@ -109,8 +114,8 @@ def lora_beacon():
     }
     print('[LORA] send payload: ', messageObj)
     print('[LORA] RSSI: ', lora.packet_rssi())
-
     send_lora_message(json.dumps(messageObj))
+    message_store.add_message(messageObj, True)
     sleep(5)
 
 
@@ -142,7 +147,6 @@ def byte_str_to_bool(string):
 #     db.flush()
 #     WEBSERVER_ENABLED = False
 WEBSERVER_ENABLED = False  # NOTE: override until BLE/Wifi clash is fixed
-
 
 button = Pin(0, Pin.IN, Pin.PULL_UP)  # onboard momentary push button, True when open / False when closed
 prev_button_value = False
@@ -181,7 +185,7 @@ if BLE_ENABLED:
                     print('[Memory - free: {}   allocated: {}]'.format(gc.mem_free(), gc.mem_alloc()))
             else:  # Received a normal message
                 send_lora_message(payload)  # Send message over Lora
-                message_store.add_message(json.loads(payload))  # Add message to local array and storage
+                message_store.add_message(json.loads(payload), True)  # Add message to local array and storage
                 # Send message to all web sockets
                 if WEBSERVER_ENABLED:
                     SendAllWSChatMsg(payload)
@@ -249,7 +253,7 @@ if WEBSERVER_ENABLED:
 
         def OnWebSocketTextMsg(webSocket, message):
             print('[WS] OnWebSocketTextMsg message: %s' % message)
-            # message_store.add_message(json.loads(message)) NOTE: are these needed, when does this fire?
+            # message_store.add_message(json.loads(message), True) NOTE: are these needed, when does this fire?
             # send_lora_message(message)
             webSocket.SendTextMessage(message)
 
@@ -261,7 +265,7 @@ if WEBSERVER_ENABLED:
         def OnWSChatTextMsg(webSocket, message):
             print('[WS] OnWSChatTextMsg message: %s' % message)
             send_lora_message(message)  # Send message over Lora
-            message_store.add_message(json.loads(message))  # Add message to local array and storage
+            message_store.add_message(json.loads(message), True)  # Add message to local array and storage
             if BLE_ENABLED and ble_peripheral.is_connected():
                 ble_peripheral.send(message)  # Send message over BLE
             SendAllWSChatMsg(message)

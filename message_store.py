@@ -25,7 +25,10 @@ class MessageStore:
                 print('[Startup] error load messageObj from btree', error)
 
     # Add message to messages array and persistent data
-    def add_message(self, message):
+    # is_sender [boolean]: if this is a message this node sent over Lora (True)
+    # or a message received from a different node over Lora (True)
+    def add_message(self, message, is_sender=False):
+        message['isSender'] = is_sender
         try:
             if len(self.messages) >= self._max_message_length:  # Make sure local messageObj array size is constrained
                 popped = self.messages.pop(0)  # Pop oldest message from messageObj
@@ -38,10 +41,15 @@ class MessageStore:
         except Exception as error:
             print('[addMessage] ', error)
 
-    #  Return the timestamp from the newest message
-    def latest_timestamp(self):
-        if len(self.messages):
-            return self.messages[len(self.messages) - 1]['timestamp']
+    #  Return the newest sent or received message_obj
+    #  is_sender [boolean]:
+    #       (True) returns latest sent message
+    #       (False) returns latest received message
+    def latest_message(self, is_sender=False):
+        messages = sorted(self.messages, key=lambda i: i['timestamp'])  # Sort by timestamp
+        messages = [d for d in messages if d['is_sender'] is is_sender]  # Filter on is_sender
+        if len(messages):
+            return messages[len(messages) - 1]
         else:  # If no messages
             return 0
 
