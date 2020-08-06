@@ -5,6 +5,10 @@ from contextlib import suppress
 import argparse
 import ast
 import subprocess
+import time
+
+
+current_milli_time = lambda: int(round(time.time() * 1000))
 
 
 # Convert --ports '["/dev/ttyS16", "/dev/ttyS7"]' to an array of strings
@@ -42,6 +46,7 @@ def ampy_operation(path, port, is_dir):
 
 
 def ampy_cmd(cmd, rm_dir=False):
+    start_time = current_milli_time()
     print(cmd, end='', flush=True)
     print(' ...', end='', flush=True)
     os.system(cmd)
@@ -52,9 +57,13 @@ def ampy_cmd(cmd, rm_dir=False):
                                     stderr=subprocess.STDOUT)  # delete dir if its there, this will fail if the destination folder is not present
         else:
             os.system(cmd)
-        print('COMPLETED')
+        print('COMPLETED', end='', flush=True)
     except Exception as error:
-        print('FAILED')
+        print('FAILED', end='', flush=True)
+     # Display time it took to run command in seconds
+    print(' [', round((current_milli_time() - start_time) / 1000), 's]')
+
+
 
 
 for port in args.ports:
