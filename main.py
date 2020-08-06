@@ -29,15 +29,29 @@ def on_lora_rx():
         print('[LORA] received payload: ', payload)
         try:
             payload_obj = json.loads(payload)
-            message_store.add_message(payload_obj)
         except (Exception, TypeError) as error:
             print("[LORA] Error parsing JSON payload: ", error)
-        # Send messageObj over BLE
-        if BLE_ENABLED and ble_peripheral.is_connected():
-            ble_peripheral.send(payload)
-        # Send message to all web sockets
-        if WEBSERVER_ENABLED:
-            SendAllWSChatMsg(payload.decode("utf-8"))
+            return
+
+        # Handle message types that are not user messages (ex SYN)
+        if "type" in payload_obj:
+            if payload_obj["type"] == "SYN":  # Handle sync packets
+                timestamp = payload_obj['timestamp']
+                # If we receive a syn packet that has an older timestamp than our newest
+                # Send our latest message
+                # NOTE: this will cause messages to possibly be lost since only the latest message will be sent out
+                # TODO: implement a syn protocol that allows for fewer messages to be lost
+                if timestamp < message_store.latest_timestamp():
+                    send_lora_message(message_store.messages[len(message_store.messages) - 1])
+
+        else:  # Handle user messages
+            message_store.add_message(payload_obj)
+            # Send messageObj over BLE
+            if BLE_ENABLED and ble_peripheral.is_connected():
+                ble_peripheral.send(payload)
+            # Send message to all web sockets
+            if WEBSERVER_ENABLED:
+                SendAllWSChatMsg(payload.decode("utf-8"))
 
 
 previous_sync_time = 0
@@ -50,10 +64,11 @@ def sync_interval():
         send_lora_sync()
 
 
+# TODO: use enum for Type?
 # Send sync packet with the timestamp of the newest messageObj
 def send_lora_sync():
     messageObj = {
-        'type': 'SYNC',
+        'type': 'SYN',
         'timestamp': message_store.messages[len(message_store.messages) - 1]
     }
     send_lora_message(messageObj)
@@ -73,7 +88,10 @@ def send_lora_message(message):
     else:
         print('[ERROR] send_lora_message(message): message must be type dict or str')
 
+
 messageCount = 0
+
+
 def lora_beacon():
     global messageCount
     messageCount += 1
@@ -276,7 +294,6 @@ if WEBSERVER_ENABLED:
 gc.collect()
 print('[Memory - free: {}   allocated: {}]'.format(gc.mem_free(), gc.mem_alloc()))
 
-
 if __name__ == '__main__':
     if WEBSERVER_ENABLED:
         # Loads the WebSockets module globally and configure it,
@@ -302,7 +319,8 @@ if __name__ == '__main__':
             if IS_BEACON:
                 lora_beacon()
             else:
-                on_lora_rx()
+                on_lora_rx()  # Handle receiving lora messages
+                sync_interval()  # Send sync packet every X seconds after last message sent
             on_button_push()
 
 

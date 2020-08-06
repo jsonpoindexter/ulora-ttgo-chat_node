@@ -38,6 +38,16 @@ class MessageStore:
         except Exception as error:
             print('[addMessage] ', error)
 
+    #  Return the timestamp from the newest message
+    def latest_timestamp(self):
+        return self.messages[len(self.messages) - 1]['timestamp']
+
+    def get_index_from_timestamp(self, timestamp):
+        for i, dic in enumerate(self.messages):
+            if dic['timestamp'] == timestamp:
+                return i
+        return -1
+
     # Close everything we going home
     def close(self):
         self._db.close()
