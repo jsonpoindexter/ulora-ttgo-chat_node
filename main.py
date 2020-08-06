@@ -47,13 +47,14 @@ def on_lora_rx():
                 # If NodeA sends a new message before NodeB can its latest message than NodeA will never receive
                 # NoteB's newest message.
                 message_obj = message_store.latest_message(is_sender=True)  # Get latest sent message
-                if timestamp < message_obj['timestamp']:
-                    message_obj = {  # Do not send 'is_sender' property since its only used locally
-                        'timestamp': message_obj['timestamp'],
-                        'message': message_obj['message'],
-                        'sender': message_obj['sender']
-                    }
-                    send_lora_message(message_obj)
+                if message_obj:
+                    if timestamp < message_obj['timestamp']:
+                        message_obj = {  # Do not send 'is_sender' property since its only used locally
+                            'timestamp': message_obj['timestamp'],
+                            'message': message_obj['message'],
+                            'sender': message_obj['sender']
+                        }
+                        send_lora_message(message_obj)
         else:  # Handle user messages
             message_store.add_message(payload_obj)
             # Send messageObj over BLE
@@ -77,9 +78,10 @@ def sync_interval():
 # TODO: use enum for Type?
 # Send sync packet with the timestamp of the latest received message_obj
 def send_lora_sync():
+    latest_message = message_store.latest_message(is_sender=False)
     message_obj = {
         'type': 'SYN',
-        'timestamp': message_store.latest_message(is_sender=False)
+        'timestamp': latest_message['timestamp'] if latest_message else 0
     }
     send_lora_message(message_obj)
 

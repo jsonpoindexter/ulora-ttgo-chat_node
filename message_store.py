@@ -15,7 +15,7 @@ class MessageStore:
         try:
             self._file = open("messages.db", "r+b")
         except OSError:
-            print('[BTREE] OSError')
+            print('[BTREE] Creating new messages.db file...')
             self._file = open("messages.db", "w+b")
         self._db = btree.open(self._file)
         for messageStr in self._db.values():
@@ -46,12 +46,15 @@ class MessageStore:
     #       (True) returns latest sent message
     #       (False) returns latest received message
     def latest_message(self, is_sender=False):
-        messages = sorted(self.messages, key=lambda i: i['timestamp'])  # Sort by timestamp
-        messages = [d for d in messages if d['is_sender'] is is_sender]  # Filter on is_sender
-        if len(messages):
-            return messages[len(messages) - 1]
+        if len(self.messages):
+            messages = sorted(self.messages, key=lambda i: i['timestamp'])  # Sort by timestamp
+            messages = [d for d in messages if d['isSender'] is is_sender]  # Filter on is_sender
+            if len(messages):
+                return messages[len(messages) - 1]
+            else:
+                return None
         else:  # If no messages
-            return 0
+            return None
 
     def get_index_from_timestamp(self, timestamp):
         for i, dic in enumerate(self.messages):
