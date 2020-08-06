@@ -40,7 +40,10 @@ class MessageStore:
 
     #  Return the timestamp from the newest message
     def latest_timestamp(self):
-        return self.messages[len(self.messages) - 1]['timestamp']
+        if len(self.messages):
+            return self.messages[len(self.messages) - 1]['timestamp']
+        else:  # If no messages
+            return 0
 
     def get_index_from_timestamp(self, timestamp):
         for i, dic in enumerate(self.messages):

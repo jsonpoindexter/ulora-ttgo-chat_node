@@ -4,7 +4,7 @@ import credentials
 from message_store import MessageStore
 
 ########## CONSTANTS ##########
-IS_BEACON = True  # Used for testing range
+IS_BEACON = False  # Used for testing range
 BLE_ENABLED = True  # Used for testing
 BLE_NAME = 'ulora2' if IS_BEACON else 'ulora'  # Name BLE will use when advertising
 SYNC_INTERVAL = 5000  # How often (ms) to send sync packet after last packet was sent
@@ -74,7 +74,7 @@ def sync_interval():
 def send_lora_sync():
     messageObj = {
         'type': 'SYN',
-        'timestamp': message_store.messages[len(message_store.messages) - 1]
+        'timestamp': message_store.latest_timestamp()
     }
     send_lora_message(messageObj)
 
@@ -85,9 +85,11 @@ def send_lora_sync():
 def send_lora_message(message):
     global previous_sync_time
     if type(message) is dict:
+        print('[LORA] sending payload: ', message)
         lora.println(json.dumps(message))
         previous_sync_time = time.ticks_ms()
     elif type(message) is str:
+        print('[LORA] sending payload: ', message)
         lora.println(message)
         previous_sync_time = time.ticks_ms()
     else:
@@ -177,7 +179,6 @@ if BLE_ENABLED:
                     gc.collect()
                     print('[Memory - free: {}   allocated: {}]'.format(gc.mem_free(), gc.mem_alloc()))
             else:  # Received a normal message
-                send_lora_message()
                 send_lora_message(payload)  # Send message over Lora
                 message_store.add_message(json.loads(payload))  # Add message to local array and storage
                 # Send message to all web sockets
