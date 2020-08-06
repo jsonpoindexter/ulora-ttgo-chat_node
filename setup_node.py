@@ -24,8 +24,10 @@ itemNames = [
     'main.py',
     'credentials.py',
     'config_lora.py',
-    'lora.py',
-    'db.py'
+    'message_store.py',
+    'wlan.py',
+    'ble_advertising.py',
+    'BLEPeripheral.py'
 ]  # files/directories to be copied over
 
 
