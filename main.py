@@ -41,6 +41,11 @@ def on_lora_rx():
                 # Send our latest message
                 # NOTE: this will cause messages to possibly be lost since only the latest message will be sent out
                 # TODO: implement a syn protocol that allows for fewer messages to be lost
+                #
+                # NOTE: Scenario: NodeA has a older timestamp than NodeB
+                # Result: NodeA will receive NodeB's latest message and ONLY the latest message.
+                # If NodeA sends a new message before NodeB can its latest message than NodeA will never receive
+                # NoteB's newest message.
                 if timestamp < message_store.latest_timestamp():
                     send_lora_message(message_store.messages[len(message_store.messages) - 1])
 
