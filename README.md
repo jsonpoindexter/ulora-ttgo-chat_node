@@ -8,5 +8,5 @@
 | ----------- | ----------- |
 | *message_store.py*   | Contains persistent btree / db data stores for nessage objects as well as helper methods  |
 | *db.py*      | Contains persistent btree / db data stores for general data such as WEBSERVER_ENABLED |
-| *wlan.pyy*      | Connects to Wifi station or creates a WIFI access point. Required if WEBSERVER_ENABLED=True |
+| *wlan.py*      | Connects to Wifi station or creates a WIFI access point. Required if WEBSERVER_ENABLED=True |
 | *setup_node.py*      | Helper cli to load files onto node |
