@@ -61,7 +61,7 @@ def send_lora_sync():
 
 # Send a message obj over lora and reset sync time
 # so we only send syn packets SYNC_INTERVAL time after last sent message
-# NOTE: accepts json/dict string or dict
+# NOTE: accepts stringify-d dict or dict
 def send_lora_message(message):
     global previous_sync_time
     if type(message) is dict:
@@ -72,6 +72,21 @@ def send_lora_message(message):
         previous_sync_time = time.ticks_ms()
     else:
         print('[ERROR] send_lora_message(message): message must be type dict or str')
+
+messageCount = 0
+def lora_beacon():
+    global messageCount
+    messageCount += 1
+    messageObj = {
+        "timestamp": time.ticks_ms(),
+        "message": 'Message #' + str(messageCount),
+        "sender": "BEACON"
+    }
+    print('[LORA] send payload: ', messageObj)
+    print('[LORA] RSSI: ', lora.packet_rssi())
+
+    send_lora_message(json.dumps(messageObj))
+    sleep(5)
 
 
 ########## DATABASE ##########
@@ -261,7 +276,7 @@ if WEBSERVER_ENABLED:
 gc.collect()
 print('[Memory - free: {}   allocated: {}]'.format(gc.mem_free(), gc.mem_alloc()))
 
-messageCount = 0
+
 if __name__ == '__main__':
     if WEBSERVER_ENABLED:
         # Loads the WebSockets module globally and configure it,
@@ -285,17 +300,7 @@ if __name__ == '__main__':
     try:
         while True:
             if IS_BEACON:
-                messageCount += 1
-                messageObj = {
-                    "timestamp": time.ticks_ms(),
-                    "message": 'Message #' + str(messageCount),
-                    "sender": "BEACON"
-                }
-                print('[LORA] send payload: ', messageObj)
-                print('[LORA] RSSI: ', lora.packet_rssi())
-
-                send_lora_message(json.dumps(messageObj))
-                sleep(5)
+                lora_beacon()
             else:
                 on_lora_rx()
             on_button_push()
