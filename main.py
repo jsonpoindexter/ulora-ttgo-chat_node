@@ -1,5 +1,7 @@
 import machine, json, gc, time
+from machine import Pin
 import credentials
+from message_store import MessageStore
 
 ########## CONSTANTS ##########
 IS_BEACON = True  # Used for testing range
@@ -7,49 +9,18 @@ BLE_ENABLED = True  # Used for testing
 BLE_NAME = 'ulora2' if IS_BEACON else 'ulora'  # Name BLE will use when advertising
 
 ########## LORA ##########
-from time import sleep
-import config_lora
-from machine import Pin, SPI
+from config_lora import parameters, device_spi, device_pins
 from sx127x import SX127x
-
-device_pins = {
-    'miso': 19,
-    'mosi': 27,
-    'ss': 18,
-    'sck': 5,
-    'dio_0': 26,
-    'reset': 16,
-    'led': 2,
-}
-
-device_spi = SPI(baudrate=10000000,
-                 polarity=0, phase=0, bits=8, firstbit=SPI.MSB,
-                 sck=Pin(device_pins['sck'], Pin.OUT, Pin.PULL_DOWN),
-                 mosi=Pin(device_pins['mosi'], Pin.OUT, Pin.PULL_UP),
-                 miso=Pin(device_pins['miso'], Pin.IN, Pin.PULL_UP))
-
-parameters = {
-    'frequency': 868E6,
-    'tx_power_level': 2,
-    'signal_bandwidth': 125E3,
-    'spreading_factor': 8,
-    'coding_rate': 5,
-    'preamble_length': 8,
-    'implicit_header': False,
-    'sync_word': 0x12,
-    'enable_CRC': True,
-    'invert_IQ': False,
-}
 
 # Restart machine if we get the 'invalid version' error
 try:
     lora = SX127x(device_spi, pins=device_pins, parameters=parameters)
 except:
-    sleep(1)  # this try/except can get caught in an uninterruptible loop, sleep gives us a chance
+    time.sleep(1)  # this try/except can get caught in an uninterruptible loop, sleep gives us a chance
     machine.reset()
 
 
-def onLoraRX():
+def on_lora_rx():
     if lora.received_packet():
         lora.blink_led()
         payload = lora.read_payload()
@@ -57,7 +28,7 @@ def onLoraRX():
         print('[LORA] received payload: ', payload)
         try:
             payload_obj = json.loads(payload)
-            addMessage(payload_obj)
+            message_store.add_message(payload_obj)
         except (Exception, TypeError) as error:
             print("[LORA] Error parsing JSON payload: ", error)
         # Send messageObj over BLE
@@ -68,7 +39,7 @@ def onLoraRX():
             SendAllWSChatMsg(payload.decode("utf-8"))
 
 
-########## BTREE ##########
+########## DATABASE ##########
 import btree
 
 # Storage of general persistent data
@@ -79,21 +50,12 @@ except OSError:
     dbFile = open("db", "w+b")
 db = btree.open(dbFile)
 
-# Storage of message objects
-try:
-    messagesDbFile = open("messages.db", "r+b")
-except OSError:
-    print('[BTREE] OSError')
-    messagesDbFile = open("messages.db", "w+b")
-messagesDb = btree.open(messagesDbFile)
-
 
 def byte_str_to_bool(string):
     if string == b'0':
         return False
     else:
         return True
-
 
 ########## WEB_SERVER_ENABLED ##########
 try:
@@ -104,6 +66,7 @@ except KeyError:
     db[b'WEBSERVER_ENABLED'] = b'0'  # btree wont let us use bool
     db.flush()
     WEBSERVER_ENABLED = False
+
 button = Pin(0, Pin.IN, Pin.PULL_UP)  # onboard momentary push button, True when open / False when closed
 prev_button_value = False
 
@@ -116,41 +79,9 @@ print("BLE_NAME: ", BLE_NAME)
 print("######### CONFIG VARIABLES ########")
 
 ########## MESSAGES ##########
-MAX_MESSAGES_LENGTH = 30
-messages = []
-for messageStr in messagesDb.values():
-    try:
-        messages.append(json.loads(messageStr))
-    except Exception as error:
-        print('[Startup] error load messageObj from btree', error)
-print('Loaded Messages: ', messages)
-
-
-def addMessage(payload):
-    try:
-        message = {
-            'timestamp': payload['timestamp'],
-            'message': payload['message'],
-            'sender': payload['sender']
-        }
-        if len(messages) >= MAX_MESSAGES_LENGTH:  # Make sure local messageObj array size is constrained
-            popped = messages.pop(0)  # Pop oldest message from messageObj
-            del messagesDb[str(popped['timestamp']).encode()]  # Remove message from message db
-            messagesDb.flush()
-        messages.append(message)  # Add to local messageObj array
-        messagesDb[str(message['timestamp']).encode()] = json.dumps(message)
-        messagesDb.flush()
-    except Exception as error:
-        print('[addMessage] ', error)
-
-
-#  Helper to find message index
-def find(lst, key, value):
-    for i, dic in enumerate(lst):
-        if dic[key] == value:
-            return i
-    return -1
-
+MAX_MESSAGES_LENGTH = 30  # Max amount of messages we will retain before removing old ones
+message_store = MessageStore(MAX_MESSAGES_LENGTH)
+print('Current Messages: ', message_store.messages)
 
 ########## BLE ##########
 if BLE_ENABLED:
@@ -166,14 +97,14 @@ if BLE_ENABLED:
             print("[BLE] Received Message: ", value)
             payload = str(value, 'utf-8')
             if payload == "ALL":  # Received request to TX all messages
-                for message in messages:
+                for message in message_store.messages:
                     print("[BLE] sending message: ", json.dumps(message))
                     ble_peripheral.send(json.dumps(message))
                     gc.collect()
                     print('[Memory - free: {}   allocated: {}]'.format(gc.mem_free(), gc.mem_alloc()))
             else:  # Received a normal message
                 lora.println(payload)  # Send message over Lora
-                addMessage(json.loads(payload))  # Add message to local array and storage
+                message_store.add_message(json.loads(payload))  # Add message to local array and storage
                 # Send message to all web sockets
                 if WEBSERVER_ENABLED:
                     SendAllWSChatMsg(payload)
@@ -198,57 +129,26 @@ def on_button_push():
             db.flush()
             db.close()  # close database
             dbFile.close()  # close database file
-            messagesDb.close()
-            messagesDbFile.close()
+            message_store.close()
             if WEBSERVER_ENABLED:  # Stop web server if running
                 mws2.Stop()
             machine.reset()  # restart
 
 
 if WEBSERVER_ENABLED:
-    # WIFI Setup
-    import network
+    from wlan import WLAN
+    wlan = WLAN()
 
-
-    def startAccessPoint():
-        global WEBSERVER_ENABLED
-        global wlan
-        wlan = network.WLAN(network.AP_IF)
-        wlan.active(True)
-        wlan.config(essid=credentials.WIFI_AP['SSID'], password=credentials.WIFI_AP['PASSWORD'],
-                    authmode=network.AUTH_WPA_WPA2_PSK)
-        # TODO: check if there is a better way than time out
-        total_time = 5000  # Give wifi 5 seconds to start AP
-        start_time = time.ticks_ms()
-        while not wlan.active() and (time.ticks_ms() - start_time) < total_time:
-            pass
-
-
-    # Try to connect to WiFi if Station SSID is specified
-    if credentials.WIFI_STA['SSID']:
-        wlan = network.WLAN(network.STA_IF)
-        wlan.active(True)
-        wlan.connect(credentials.WIFI_STA['SSID'], credentials.WIFI_STA['PASSWORD'])
-        total_time = 5000  # Give wifi 5 seconds to connect
-        start_time = time.ticks_ms()
-        while wlan.status() != network.STAT_GOT_IP and (time.ticks_ms() - start_time) < total_time:
-            pass
-        # Start ip an Access Point
-        if not wlan.isconnected():
-            wlan.active(False)
-            startAccessPoint()
-    else:
-        startAccessPoint()
 
     # If we cant host an AP or connect to WIFI then no need for web server
-    if not wlan.active() and not wlan.isconnected():
-        print('wifi error: ', wlan.active(), wlan.isconnected())
+    if wlan.isNotReady():
+        print('[WIFI] error: active: ', wlan.interface.active(), ' isconnected" ', wlan.interface.isconnected())
         WEBSERVER_ENABLED = False
         db[b'WEBSERVER_ENABLED'] = b'0'
         db.flush()
     else:
         print('[WLAN] Connection successful')
-        print(wlan.ifconfig())
+        print(wlan.interface.ifconfig())
 
         from MicroWebSrv2 import *
 
@@ -266,13 +166,13 @@ if WEBSERVER_ENABLED:
             with _chatLock:
                 _chatWebSockets.append(webSocket)
                 print('[WS] WSJoinChat %s:%s connected' % addr)
-                if messages:
-                    webSocket.SendTextMessage(json.dumps(messages))
+                if message_store.messages:
+                    webSocket.SendTextMessage(json.dumps(message_store.messages))
 
 
         def OnWebSocketTextMsg(webSocket, message):
             print('[WS] OnWebSocketTextMsg message: %s' % message)
-            # addMessage(json.loads(message)) NOTE: are these needed, when does this fire?
+            # message_store.add_message(json.loads(message)) NOTE: are these needed, when does this fire?
             # lora.println(message)
             webSocket.SendTextMessage(message)
 
@@ -284,7 +184,7 @@ if WEBSERVER_ENABLED:
         def OnWSChatTextMsg(webSocket, message):
             print('[WS] OnWSChatTextMsg message: %s' % message)
             lora.println(message)  # Send message over Lora
-            addMessage(json.loads(message))  # Add message to local array and storage
+            message_store.add_message(json.loads(message))  # Add message to local array and storage
             if BLE_ENABLED and ble_peripheral.is_connected():
                 ble_peripheral.send(message)  # Send message over BLE
             SendAllWSChatMsg(message)
@@ -360,7 +260,7 @@ if __name__ == '__main__':
                 lora.println(json.dumps(messageObj))
                 sleep(5)
             else:
-                onLoraRX()
+                on_lora_rx()
             on_button_push()
 
 
@@ -369,7 +269,6 @@ if __name__ == '__main__':
 
     # End,
     mws2.Stop()
-    messagesDbFile.close()
-    messagesDb.close()
+    message_store.close()
     db.close()
     dbFile.close()

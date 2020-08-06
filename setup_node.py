@@ -1,4 +1,4 @@
-#  Move need files over to ESP32. It assumes 1:1 file and directory match
+#  Move need files over to ESP32. It assumes 1:1 file and directory match w/ items listed in 'itemNames' array
 # Required: ampy installed
 import os
 from contextlib import suppress
@@ -24,7 +24,8 @@ itemNames = [
     'main.py',
     'credentials.py',
     'config_lora.py',
-    'www'
+    'lora.py',
+    'db.py'
 ]  # files/directories to be copied over
 
 
