@@ -7,6 +7,7 @@ from message_store import MessageStore
 IS_BEACON = True  # Used for testing range
 BLE_ENABLED = True  # Used for testing
 BLE_NAME = 'ulora2' if IS_BEACON else 'ulora'  # Name BLE will use when advertising
+SYNC_INTERVAL = 5000  # How often (ms) to send sync packet after last packet was sent
 
 ########## LORA ##########
 from config_lora import parameters, device_spi, device_pins
@@ -39,6 +40,40 @@ def on_lora_rx():
             SendAllWSChatMsg(payload.decode("utf-8"))
 
 
+previous_sync_time = 0
+
+
+# Send a syn packet SYNC_INTERVAL after last message was sent
+def sync_interval():
+    current_millis = time.ticks_ms()
+    if current_millis - previous_sync_time > SYNC_INTERVAL:
+        send_lora_sync()
+
+
+# Send sync packet with the timestamp of the newest messageObj
+def send_lora_sync():
+    messageObj = {
+        'type': 'SYNC',
+        'timestamp': message_store.messages[len(message_store.messages) - 1]
+    }
+    send_lora_message(messageObj)
+
+
+# Send a message obj over lora and reset sync time
+# so we only send syn packets SYNC_INTERVAL time after last sent message
+# NOTE: accepts json/dict string or dict
+def send_lora_message(message):
+    global previous_sync_time
+    if type(message) is dict:
+        lora.println(json.dumps(message))
+        previous_sync_time = time.ticks_ms()
+    elif type(message) is str:
+        lora.println(message)
+        previous_sync_time = time.ticks_ms()
+    else:
+        print('[ERROR] send_lora_message(message): message must be type dict or str')
+
+
 ########## DATABASE ##########
 import btree
 
@@ -56,6 +91,7 @@ def byte_str_to_bool(string):
         return False
     else:
         return True
+
 
 ########## WEB_SERVER_ENABLED ##########
 try:
@@ -103,7 +139,8 @@ if BLE_ENABLED:
                     gc.collect()
                     print('[Memory - free: {}   allocated: {}]'.format(gc.mem_free(), gc.mem_alloc()))
             else:  # Received a normal message
-                lora.println(payload)  # Send message over Lora
+                send_lora_message()
+                send_lora_message(payload)  # Send message over Lora
                 message_store.add_message(json.loads(payload))  # Add message to local array and storage
                 # Send message to all web sockets
                 if WEBSERVER_ENABLED:
@@ -117,7 +154,7 @@ if BLE_ENABLED:
 
 # Toggle WEBSERVER_ENABLE and restart on button push
 # TODO: toggle WIFI without restart
-# TODO: implement press/hold
+# TODO: implement press/hold and interupt
 def on_button_push():
     global prev_button_value
     button_value = button.value()
@@ -137,8 +174,8 @@ def on_button_push():
 
 if WEBSERVER_ENABLED:
     from wlan import WLAN
-    wlan = WLAN()
 
+    wlan = WLAN()
 
     # If we cant host an AP or connect to WIFI then no need for web server
     if wlan.isNotReady():
@@ -173,7 +210,7 @@ if WEBSERVER_ENABLED:
         def OnWebSocketTextMsg(webSocket, message):
             print('[WS] OnWebSocketTextMsg message: %s' % message)
             # message_store.add_message(json.loads(message)) NOTE: are these needed, when does this fire?
-            # lora.println(message)
+            # send_lora_message(message)
             webSocket.SendTextMessage(message)
 
 
@@ -183,7 +220,7 @@ if WEBSERVER_ENABLED:
 
         def OnWSChatTextMsg(webSocket, message):
             print('[WS] OnWSChatTextMsg message: %s' % message)
-            lora.println(message)  # Send message over Lora
+            send_lora_message(message)  # Send message over Lora
             message_store.add_message(json.loads(message))  # Add message to local array and storage
             if BLE_ENABLED and ble_peripheral.is_connected():
                 ble_peripheral.send(message)  # Send message over BLE
@@ -257,7 +294,7 @@ if __name__ == '__main__':
                 print('[LORA] send payload: ', messageObj)
                 print('[LORA] RSSI: ', lora.packet_rssi())
 
-                lora.println(json.dumps(messageObj))
+                send_lora_message(json.dumps(messageObj))
                 sleep(5)
             else:
                 on_lora_rx()
