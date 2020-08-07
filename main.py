@@ -35,8 +35,9 @@ def on_lora_rx():
 
         # Handle message types that are not user messages (ex SYN)
         if "type" in payload_obj:
-            if payload_obj["type"] == "SYN":  # Handle sync packets
-                timestamp = payload_obj['timestamp']
+            message_type = payload_obj["type"]
+            timestamp = payload_obj['timestamp']
+            if message_type == "SYN":  # Handle sync packets
                 # If we receive a syn packet that has an older timestamp than our newest
                 # Send our latest message
                 # NOTE: this will cause messages to possibly be lost since only the latest message will be sent out
@@ -55,15 +56,20 @@ def on_lora_rx():
                             'sender': message_obj['sender']
                         }
                         send_lora_message(message_obj)
+            elif message_type == "ACK":
+                message_store.ack(timestamp)
+                ble_peripheral.send(json.dumps(payload))  # send the ack over BLE
+
         else:  # Handle user messages
             message_store.add_message(payload_obj)
             send_lora_ack(payload_obj['timestamp'])
-            # Send messageObj over BLE
-            if BLE_ENABLED and ble_peripheral.is_connected():
-                ble_peripheral.send(payload)
-            # Send message to all web sockets
-            if WEBSERVER_ENABLED:
-                SendAllWSChatMsg(payload.decode("utf-8"))
+
+        # Send messageObj over BLE
+        if BLE_ENABLED and ble_peripheral.is_connected():
+            ble_peripheral.send(payload)
+        # Send message to all web sockets
+        if WEBSERVER_ENABLED:
+            SendAllWSChatMsg(payload.decode("utf-8"))
 
 
 previous_sync_time = 0

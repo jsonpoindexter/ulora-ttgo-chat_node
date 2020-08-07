@@ -29,6 +29,7 @@ class MessageStore:
     # or a message received from a different node over Lora (True)
     def add_message(self, message, is_sender=False):
         message['isSender'] = is_sender
+        message['ack'] = not is_sender  # If the message has been acknowledged by another node
         try:
             if len(self.messages) >= self._max_message_length:  # Make sure local messageObj array size is constrained
                 popped = self.messages.pop(0)  # Pop oldest message from messageObj
