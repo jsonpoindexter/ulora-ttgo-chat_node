@@ -57,6 +57,7 @@ def on_lora_rx():
                         send_lora_message(message_obj)
         else:  # Handle user messages
             message_store.add_message(payload_obj)
+            send_lora_ack(payload_obj['timestamp'])
             # Send messageObj over BLE
             if BLE_ENABLED and ble_peripheral.is_connected():
                 ble_peripheral.send(payload)
@@ -82,6 +83,15 @@ def send_lora_sync():
     message_obj = {
         'type': 'SYN',
         'timestamp': latest_message['timestamp'] if latest_message else 0
+    }
+    send_lora_message(message_obj)
+
+
+# Acknowledge received packet
+def send_lora_ack(timestamp):
+    message_obj = {
+        'type': 'ACK',
+        'timestamp': timestamp
     }
     send_lora_message(message_obj)
 
