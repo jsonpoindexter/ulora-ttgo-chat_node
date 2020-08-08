@@ -2,11 +2,13 @@ import machine, json, gc, time
 from machine import Pin
 import credentials
 from message_store import MessageStore
+from config_lora import get_nodename
 
 ########## CONSTANTS ##########
 IS_BEACON = False  # Used for testing range
 BLE_ENABLED = True  # Used for testing
-BLE_NAME = 'ulora2' if IS_BEACON else 'ulora'  # Name BLE will use when advertising
+# BLE_NAME = 'ulora2' if IS_BEACON else 'ulora'  # Name BLE will use when advertising
+BLE_NAME = 'ulora2' if get_nodename() == "ESP_30aea4bfbe88" else "ulora"  # NOTE: USE ONLY FOR DEV
 SYNC_INTERVAL = 5000  # How often (ms) to send sync packet after last packet was sent
 
 ########## LORA ##########
@@ -37,15 +39,6 @@ def on_lora_rx():
         if "type" in payload_obj:
             if payload_obj["type"] == "SYN":  # Handle sync packets
                 timestamp = payload_obj['timestamp']
-                # If we receive a syn packet that has an older timestamp than our newest
-                # Send our latest message
-                # NOTE: this will cause messages to possibly be lost since only the latest message will be sent out
-                # TODO: implement a syn protocol that allows for fewer messages to be lost
-                #
-                # NOTE: Scenario: NodeA has a older timestamp than NodeB
-                # Result: NodeA will receive NodeB's latest message and ONLY the latest message.
-                # If NodeA sends a new message before NodeB can its latest message than NodeA will never receive
-                # NoteB's newest message.
                 message_obj = message_store.latest_message(is_sender=True)  # Get latest sent message
                 if message_obj:
                     if timestamp < message_obj['timestamp']:
@@ -67,7 +60,7 @@ def on_lora_rx():
                             print('[LORA] Error setting message ack: ', err)
         else:  # Handle user messages
             message_store.add_message(payload_obj)
-            # Send messageObj over BLE
+            # Send message_obj over BLE
             if BLE_ENABLED and ble_peripheral.is_connected():
                 ble_peripheral.send(payload)
             # Send message to all web sockets
@@ -119,15 +112,15 @@ messageCount = 0
 def lora_beacon():
     global messageCount
     messageCount += 1
-    messageObj = {
+    message_obj = {
         "timestamp": time.ticks_ms(),
         "message": 'Message #' + str(messageCount),
         "sender": "BEACON"
     }
-    print('[LORA] send payload: ', messageObj)
+    print('[LORA] send payload: ', message_obj)
     print('[LORA] RSSI: ', lora.packet_rssi())
-    send_lora_message(json.dumps(messageObj))
-    message_store.add_message(messageObj, True)
+    send_lora_message(json.dumps(message_obj))
+    message_store.add_message(message_obj, True)
     sleep(5)
 
 
@@ -150,14 +143,14 @@ def byte_str_to_bool(string):
         return True
 
 
-# try:
-#     WEBSERVER_ENABLED = byte_str_to_bool(db[b'WEBSERVER_ENABLED'])  # Used to enable/disable web server
-#     db.flush()
-# except KeyError:
-#     print('key error')
-#     db[b'WEBSERVER_ENABLED'] = b'0'  # btree wont let us use bool
-#     db.flush()
-#     WEBSERVER_ENABLED = False
+try:
+    WEBSERVER_ENABLED = byte_str_to_bool(db[b'WEBSERVER_ENABLED'])  # Used to enable/disable web server
+    db.flush()
+except KeyError:
+    print('key error')
+    db[b'WEBSERVER_ENABLED'] = b'0'  # btree wont let us use bool
+    db.flush()
+    WEBSERVER_ENABLED = False
 WEBSERVER_ENABLED = False  # NOTE: override until BLE/Wifi clash is fixed
 
 button = Pin(0, Pin.IN, Pin.PULL_UP)  # onboard momentary push button, True when open / False when closed
@@ -165,6 +158,7 @@ prev_button_value = False
 
 ######### PRINT CONST ########
 print("######### CONFIG VARIABLES ########")
+print('NODE_NAME: ', get_nodename())
 print("IS_BEACON: ", IS_BEACON)
 print("WEBSERVER_ENABLED: ", WEBSERVER_ENABLED)
 print("BLE_ENABLED: ", BLE_ENABLED)
@@ -196,7 +190,13 @@ if BLE_ENABLED:
                     gc.collect()
                     print('[Memory - free: {}   allocated: {}]'.format(gc.mem_free(), gc.mem_alloc()))
             else:  # Received a normal message
-                send_lora_message(payload)  # Send message over Lora
+                message_obj = json.loads(payload)
+                message_obj = {  # Do not send 'is_sender', or 'ack' property since its only used locally
+                    'timestamp': message_obj['timestamp'],
+                    'message': message_obj['message'],
+                    'sender': message_obj['sender']
+                }
+                send_lora_message(message_obj)  # Send message over Lora
                 message_store.add_message(json.loads(payload), True)  # Add message to local array and storage
                 # Send message to all web sockets
                 if WEBSERVER_ENABLED:
