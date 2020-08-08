@@ -41,7 +41,7 @@ def on_lora_rx():
                 timestamp = payload_obj['timestamp']
                 message_obj = message_store.latest_message(is_sender=True)  # Get latest sent message
                 if message_obj:
-                    if timestamp < message_obj['timestamp']:
+                    if timestamp < message_obj['timestamp']: # Reply to SYN with latest message they are missing
                         message_obj = {  # Do not send 'is_sender' property since its only used locally
                             'timestamp': message_obj['timestamp'],
                             'message': message_obj['message'],
@@ -121,7 +121,7 @@ def lora_beacon():
     print('[LORA] RSSI: ', lora.packet_rssi())
     send_lora_message(json.dumps(message_obj))
     message_store.add_message(message_obj, True)
-    sleep(5)
+    time.sleep(5)
 
 
 ########## DATABASE ##########
