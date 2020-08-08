@@ -55,6 +55,16 @@ def on_lora_rx():
                             'sender': message_obj['sender']
                         }
                         send_lora_message(message_obj)
+                    elif timestamp == message_obj['timestamp'] and not message_obj['ack']:  # if we know that the last message was received but we havent acknolesged uit yet
+                        try:
+                            message_store.set_message_ack(timestamp)
+                            if BLE_ENABLED and ble_peripheral.is_connected():
+                                ble_peripheral.send(json.dumps({
+                                    'type': 'ACK',
+                                    'timestamp': timestamp
+                                }))
+                        except Exception as err:
+                            print('[LORA] Error setting message ack: ', err)
         else:  # Handle user messages
             message_store.add_message(payload_obj)
             # Send messageObj over BLE
