@@ -7,8 +7,8 @@ from config_lora import get_nodename
 ########## CONSTANTS ##########
 IS_BEACON = False  # Used for testing range
 BLE_ENABLED = True  # Used for testing
-# BLE_NAME = 'ulora2' if IS_BEACON else 'ulora'  # Name BLE will use when advertising
-BLE_NAME = 'ulora2' if get_nodename() == "ESP_30aea4bfbe88" else "ulora"  # NOTE: USE ONLY FOR DEV
+BLE_NAME = 'ulora2' if IS_BEACON else 'ulora'  # Name BLE will use when advertising
+# BLE_NAME = 'ulora2' if get_nodename() == "ESP_30aea4bfbe88" else "ulora"  # NOTE: USE ONLY FOR DEV
 SYNC_INTERVAL = 5000  # How often (ms) to send sync packet after last packet was sent
 
 ########## LORA ##########
@@ -62,7 +62,10 @@ def on_lora_rx():
             message_store.add_message(payload_obj)
             # Send message_obj over BLE
             if BLE_ENABLED and ble_peripheral.is_connected():
-                ble_peripheral.send(payload)
+                payload_obj['isSender'] = False  # TODO: we shouldn't do this twice (also in message_store.add_message)
+                payload_obj['ack'] = True
+                payload_obj['type'] = 'MSG'
+                ble_peripheral.send(json.dumps(payload_obj))
             # Send message to all web sockets
             if WEBSERVER_ENABLED:
                 SendAllWSChatMsg(payload.decode("utf-8"))
@@ -184,9 +187,10 @@ if BLE_ENABLED:
             print("[BLE] Received Message: ", value)
             payload = str(value, 'utf-8')
             if payload == "ALL":  # Received request to TX all messages
-                for message in message_store.messages:
-                    print("[BLE] sending message: ", json.dumps(message))
-                    ble_peripheral.send(json.dumps(message))
+                for message_obj in message_store.messages:
+                    message_obj['type'] = 'MSG'
+                    print("[BLE] sending message: ", json.dumps(message_obj))
+                    ble_peripheral.send(json.dumps(message_obj))
                     gc.collect()
                     print('[Memory - free: {}   allocated: {}]'.format(gc.mem_free(), gc.mem_alloc()))
             else:  # Received a normal message

@@ -33,7 +33,7 @@ device_spi = SPI(baudrate=10000000,
 
 parameters = {
     'frequency': 868E6,
-    'tx_power_level': 2,
+    'tx_power_level': 14,
     'signal_bandwidth': 125E3,
     'spreading_factor': 8,
     'coding_rate': 5,
