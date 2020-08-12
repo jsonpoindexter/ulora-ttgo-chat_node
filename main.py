@@ -24,6 +24,7 @@ except:
 
 
 def on_lora_rx():
+    global previous_sync_time
     if lora.received_packet():
         lora.blink_led()
         payload = lora.read_payload()
@@ -38,6 +39,7 @@ def on_lora_rx():
         # Handle message types that are not user messages (ex SYN)
         if "type" in payload_obj:
             if payload_obj["type"] == "SYN":  # Handle sync packets
+                previous_sync_time = time.ticks_ms() - SYNC_INTERVAL / 2 # Offset SYN packets by half the interval time NOTE: assumes only 2 node network
                 timestamp = payload_obj['timestamp']
                 message_obj = message_store.latest_message(is_sender=True)  # Get latest sent message
                 if message_obj:
@@ -76,9 +78,11 @@ previous_sync_time = 0
 
 # Send a syn packet SYNC_INTERVAL after last message was sent
 def sync_interval():
+    global previous_sync_time
     current_millis = time.ticks_ms()
     if current_millis - previous_sync_time > SYNC_INTERVAL:
         send_lora_sync()
+        previous_sync_time = time.ticks_ms()
 
 
 # TODO: use enum for Type?
@@ -96,15 +100,12 @@ def send_lora_sync():
 # so we only send syn packets SYNC_INTERVAL time after last sent message
 # NOTE: accepts stringify-d dict or dict
 def send_lora_message(message):
-    global previous_sync_time
     if type(message) is dict:
         print('[LORA] sending payload: ', message)
         lora.println(json.dumps(message))
-        previous_sync_time = time.ticks_ms()
     elif type(message) is str:
         print('[LORA] sending payload: ', message)
         lora.println(message)
-        previous_sync_time = time.ticks_ms()
     else:
         print('[ERROR] send_lora_message(message): message must be type dict or str')
 
