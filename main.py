@@ -10,6 +10,7 @@ BLE_ENABLED = True  # Used for testing
 BLE_NAME = 'ulora2' if IS_BEACON else 'ulora'  # Name BLE will use when advertising
 # BLE_NAME = 'ulora2' if get_nodename() == "ESP_30aea4bfbe88" else "ulora"  # NOTE: USE ONLY FOR DEV
 SYNC_INTERVAL = 5000  # How often (ms) to send sync packet after last packet was sent
+NODE_NAME = get_nodename()
 
 ########## LORA ##########
 from config_lora import parameters, device_spi, device_pins
@@ -28,7 +29,7 @@ def on_lora_rx():
     if lora.received_packet():
         lora.blink_led()
         payload = lora.read_payload()
-        print('[LORA] RSSI: ', lora.packet_rssi())
+
         print('[LORA] received payload: ', payload)
         try:
             payload_obj = json.loads(payload)
@@ -39,18 +40,19 @@ def on_lora_rx():
         # Handle message types that are not user messages (ex SYN)
         if "type" in payload_obj:
             if payload_obj["type"] == "SYN":  # Handle sync packets
-                previous_sync_time = time.ticks_ms() - SYNC_INTERVAL / 2 # Offset SYN packets by half the interval time NOTE: assumes only 2 node network
+                previous_sync_time = time.ticks_ms() - SYNC_INTERVAL / 2  # Offset SYN packets by half the interval time NOTE: assumes only 2 node network
                 timestamp = payload_obj['timestamp']
                 message_obj = message_store.latest_message(is_sender=True)  # Get latest sent message
                 if message_obj:
-                    if timestamp < message_obj['timestamp']: # Reply to SYN with latest message they are missing
+                    if timestamp < message_obj['timestamp']:  # Reply to SYN with latest message they are missing
                         message_obj = {  # Do not send 'is_sender' property since its only used locally
                             'timestamp': message_obj['timestamp'],
                             'message': message_obj['message'],
                             'sender': message_obj['sender']
                         }
                         send_lora_message(message_obj)
-                    elif timestamp == message_obj['timestamp'] and not message_obj['ack']:  # if we know that the last message was received but we havent acknolesged uit yet
+                    elif timestamp == message_obj['timestamp'] and not message_obj[
+                        'ack']:  # if we know that the last message was received but we haven't acknowledged uit yet
                         try:
                             message_store.set_message_ack(timestamp)
                             if BLE_ENABLED and ble_peripheral.is_connected():
@@ -60,6 +62,12 @@ def on_lora_rx():
                                 }))
                         except Exception as err:
                             print('[LORA] Error setting message ack: ', err)
+                    if BLE_ENABLED and ble_peripheral.is_connected():
+                        ble_peripheral.send(json.dumps({
+                            'type': 'SYN',
+                            'address': NODE_NAME,
+                            'rssi': lora.packet_rssi()
+                        }))
         else:  # Handle user messages
             message_store.add_message(payload_obj)
             # Send message_obj over BLE
