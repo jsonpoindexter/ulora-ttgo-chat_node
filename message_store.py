@@ -30,15 +30,15 @@ class MessageStore:
     # is_sender [boolean]: if this is a message this node sent over Lora (True)
     # or a message received from a different node over Lora (True)
     def add_message(self, message_obj, is_sender=False):
-
-        if not 'timestamp' or not 'sender' or not 'message' or \
-                not message_obj['timestamp'] or not message_obj['sender'] or not message_obj['message']:
-            print('[message_store:add_message] message did not contain "timestamp" or not "sender" or not "message" '
-                  'key or is blank value')
-        message_obj['isSender'] = is_sender
-        message_obj['ack'] = not is_sender
-        print('[message_store:add_message] adding message ', message_obj)
         try:
+            if not 'timestamp' or not 'sender' or not 'message' or \
+                    not message_obj['timestamp'] or not message_obj['sender'] or not message_obj['message']:
+                print(
+                    '[message_store:add_message] message did not contain "timestamp" or not "sender" or not "message" '
+                    'key or is blank value')
+            message_obj['isSender'] = is_sender
+            message_obj['ack'] = not is_sender
+            print('[message_store:add_message] adding message ', message_obj)
             if len(self.messages) >= self._max_message_length:  # Make sure local message_obj array size is constrained
                 popped = self.messages.pop(0)  # Pop oldest message from message_obj
                 del self._db[str(popped['timestamp']).encode()]  # Remove message from message db
