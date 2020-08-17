@@ -76,9 +76,6 @@ def on_lora_rx():
                 payload_obj['ack'] = True
                 payload_obj['type'] = 'MSG'
                 ble_peripheral.send(json.dumps(payload_obj))
-            # Send message to all web sockets
-            if WEBSERVER_ENABLED:
-                SendAllWSChatMsg(payload.decode("utf-8"))
 
 
 previous_sync_time = 0
@@ -143,7 +140,7 @@ import btree
 try:
     dbFile = open("db", "r+b")
 except OSError:
-    print('[BTREE] OSError')
+    print('[BTREE] Creating new db file...')
     dbFile = open("db", "w+b")
 db = btree.open(dbFile)
 
@@ -155,24 +152,10 @@ def byte_str_to_bool(string):
         return True
 
 
-try:
-    WEBSERVER_ENABLED = byte_str_to_bool(db[b'WEBSERVER_ENABLED'])  # Used to enable/disable web server
-    db.flush()
-except KeyError:
-    print('key error')
-    db[b'WEBSERVER_ENABLED'] = b'0'  # btree wont let us use bool
-    db.flush()
-    WEBSERVER_ENABLED = False
-WEBSERVER_ENABLED = False  # NOTE: override until BLE/Wifi clash is fixed
-
-button = Pin(0, Pin.IN, Pin.PULL_UP)  # onboard momentary push button, True when open / False when closed
-prev_button_value = False
-
 ######### PRINT CONST ########
 print("######### CONFIG VARIABLES ########")
 print('NODE_NAME: ', get_nodename())
 print("IS_BEACON: ", IS_BEACON)
-print("WEBSERVER_ENABLED: ", WEBSERVER_ENABLED)
 print("BLE_ENABLED: ", BLE_ENABLED)
 print("BLE_NAME: ", BLE_NAME)
 print("######### CONFIG VARIABLES ########")
@@ -211,145 +194,16 @@ if BLE_ENABLED:
                 }
                 send_lora_message(message_obj)  # Send message over Lora
                 message_store.add_message(json.loads(payload), True)  # Add message to local array and storage
-                # Send message to all web sockets
-                if WEBSERVER_ENABLED:
-                    SendAllWSChatMsg(payload)
         except Exception as error:
             print('[on_ble_rx] ', error)
 
 
     ble_peripheral.on_write(on_ble_rx)
 
-
-# Toggle WEBSERVER_ENABLE and restart on button push
-# TODO: toggle WIFI without restart
-# TODO: implement press/hold and interupt
-def on_button_push():
-    global prev_button_value
-    button_value = button.value()
-    if button_value != prev_button_value:
-        prev_button_value = button_value
-        if not button_value:
-            print('setting WEBSERVER_ENABLED: ', b'1' if not WEBSERVER_ENABLED else b'0')
-            db[b'WEBSERVER_ENABLED'] = b'1' if not WEBSERVER_ENABLED else b'0'  # toggle value
-            db.flush()
-            db.close()  # close database
-            dbFile.close()  # close database file
-            message_store.close()
-            if WEBSERVER_ENABLED:  # Stop web server if running
-                mws2.Stop()
-            machine.reset()  # restart
-
-
-if WEBSERVER_ENABLED:
-    from wlan import WLAN
-
-    wlan = WLAN()
-
-    # If we cant host an AP or connect to WIFI then no need for web server
-    if wlan.isNotReady():
-        print('[WIFI] error: active: ', wlan.interface.active(), ' isconnected" ', wlan.interface.isconnected())
-        WEBSERVER_ENABLED = False
-        db[b'WEBSERVER_ENABLED'] = b'0'
-        db.flush()
-    else:
-        print('[WLAN] Connection successful')
-        print(wlan.interface.ifconfig())
-
-        from MicroWebSrv2 import *
-
-        global _chatWebSockets
-        _chatWebSockets = []
-
-        global _chatLock
-        _chatLock = allocate_lock()
-
-
-        def WSJoinChat(webSocket):
-            webSocket.OnTextMessage = OnWSChatTextMsg
-            webSocket.OnClosed = OnWSChatClosed
-            addr = webSocket.Request.UserAddress
-            with _chatLock:
-                _chatWebSockets.append(webSocket)
-                print('[WS] WSJoinChat %s:%s connected' % addr)
-                if message_store.messages:
-                    webSocket.SendTextMessage(json.dumps(message_store.messages))
-
-
-        def OnWebSocketTextMsg(webSocket, message):
-            print('[WS] OnWebSocketTextMsg message: %s' % message)
-            # message_store.add_message(json.loads(message), True) NOTE: are these needed, when does this fire?
-            # send_lora_message(message)
-            webSocket.SendTextMessage(message)
-
-
-        def OnWebSocketBinaryMsg(webSocket, msg):
-            print('WebSocket binary message: %s' % msg)
-
-
-        def OnWSChatTextMsg(webSocket, message):
-            print('[WS] OnWSChatTextMsg message: %s' % message)
-            send_lora_message(message)  # Send message over Lora
-            message_store.add_message(json.loads(message), True)  # Add message to local array and storage
-            if BLE_ENABLED and ble_peripheral.is_connected():
-                ble_peripheral.send(message)  # Send message over BLE
-            SendAllWSChatMsg(message)
-
-
-        def OnWSChatClosed(webSocket):
-            addr = webSocket.Request.UserAddress
-            print('[WS] OnWSChatClosed message:  %s:%s' % addr)
-            with _chatLock:
-                if webSocket in _chatWebSockets:
-                    _chatWebSockets.remove(webSocket)
-
-
-        def OnWebSocketClosed(webSocket):
-            print('[WS] OnWebSocketClosed %s:%s closed' % webSocket.Request.UserAddress)
-
-
-        def OnWebSocketAccepted(microWebSrv2, webSocket):
-            print('Example WebSocket accepted:')
-            print('   - User   : %s:%s' % webSocket.Request.UserAddress)
-            print('   - Path   : %s' % webSocket.Request.Path)
-            print('   - Origin : %s' % webSocket.Request.Origin)
-            if webSocket.Request.Path.lower() == '/wschat':
-                WSJoinChat(webSocket)
-            else:
-                webSocket.OnTextMessage = OnWebSocketTextMsg
-                webSocket.OnBinaryMessage = OnWebSocketBinaryMsg
-                webSocket.OnClosed = OnWebSocketClosed
-
-
-        # Send chat message to all WS clients
-        def SendAllWSChatMsg(message):
-            with _chatLock:
-                for ws in _chatWebSockets:
-                    ws.SendTextMessage(message)
-
 gc.collect()
 print('[Memory - free: {}   allocated: {}]'.format(gc.mem_free(), gc.mem_alloc()))
 
 if __name__ == '__main__':
-    if WEBSERVER_ENABLED:
-        # Loads the WebSockets module globally and configure it,
-        wsMod = MicroWebSrv2.LoadModule('WebSockets')
-        wsMod.OnWebSocketAccepted = OnWebSocketAccepted
-
-        # Instantiates the MicroWebSrv2 class,
-        mws2 = MicroWebSrv2()
-        mws2.AllowAllOrigins = True  # TODO: remove after testing
-        mws2.CORSAllowAll = True  # TODO: remove after testing
-
-        # For embedded MicroPython, use a very light configuration,
-        mws2.SetEmbeddedConfig()
-
-        # All pages not found will be redirected to the home '/',
-        # mws2.NotFoundURL = '/'
-
-        # Starts the server as easily as possible in managed mode,
-        mws2.StartManaged()
-        # Main program loop until keyboard interrupt,
     try:
         while True:
             if IS_BEACON:
@@ -357,14 +211,12 @@ if __name__ == '__main__':
             else:
                 on_lora_rx()  # Handle receiving lora messages
                 sync_interval()  # Send sync packet every X seconds after last message sent
-            on_button_push()
 
 
     except KeyboardInterrupt:
         pass
 
     # End,
-    mws2.Stop()
     message_store.close()
     db.close()
     dbFile.close()
