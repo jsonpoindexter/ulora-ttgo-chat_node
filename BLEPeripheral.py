@@ -32,8 +32,8 @@ class BLESPeripheral:
         ((self._handle_tx, self._handle_rx,),) = self._ble.gatts_register_services(
             (_UART_SERVICE,)
         )
-        self._ble.gatts_set_buffer(self._handle_tx, 100, True)
-        self._ble.gatts_set_buffer(self._handle_rx, 100, True)
+        self._ble.gatts_set_buffer(self._handle_tx, 200, True)
+        self._ble.gatts_set_buffer(self._handle_rx, 200, True)
         self._connections = set()
         self._write_callback = None
         self._payload = advertising_payload(name=name, services=[_UART_UUID],)
