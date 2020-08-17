@@ -45,6 +45,7 @@ class MessageStore:
                 self._db.flush()
             self.messages.append(message_obj)  # Add to local message_obj array
             self.add_message_to_db(message_obj)
+            return message_obj
         except Exception as error:
             print('[addMessage] Error: ', error)
 

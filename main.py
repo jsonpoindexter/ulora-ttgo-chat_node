@@ -181,7 +181,7 @@ if BLE_ENABLED:
             if payload == "ALL":  # Received request to TX all messages
                 for message_obj in message_store.messages:
                     message_obj['type'] = 'MSG'
-                    print("[BLE] sending message: ", json.dumps(message_obj))
+                    print("[BLE] sending message: ", message_obj)
                     ble_peripheral.send(json.dumps(message_obj))
                     gc.collect()
                     print('[Memory - free: {}   allocated: {}]'.format(gc.mem_free(), gc.mem_alloc()))
@@ -193,7 +193,10 @@ if BLE_ENABLED:
                     'sender': message_obj['sender']
                 }
                 send_lora_message(message_obj)  # Send message over Lora
-                message_store.add_message(json.loads(payload), True)  # Add message to local array and storage
+                message_obj = message_store.add_message(json.loads(payload), True)  # Add message to local array and storage
+                print("[BLE] sending message: ", message_obj)
+                ble_peripheral.send(json.dumps(message_obj))  # Send message to all BLE devices
+
         except Exception as error:
             print('[on_ble_rx] ', error)
 
